@@ -21,25 +21,50 @@ class BookRatings:
     
     def matching_ratings_for_book(self, book):
         """ 
-        Returns array of `BookRating`s if any ratings present. 
-        Contains either the direct rating for the book or the ratings for the series.
+        Returns array of `BookRating`s. 
+        Contains either the direct rating for the book or the ratings for the series if present.
         """
+        ratings = []
         if book.title in self.rating_by_title:
-            return [self.rating_by_title[book.title]]
+            ratings.append(self.rating_by_title[book.title])
 
-        if book.series:
-            if book.series in self.ratings_by_series:
-                return self.ratings_by_series[book.series]
+        if book.series and book.series in self.ratings_by_series:
+            ratings.extend(self.ratings_by_series[book.series])
 
-        return None
+        return ratings
 
     def has_directly_rated_book(self, book):
         return book.title in self.rating_by_title
     
-    def has_rated_book_or_series_as_f_tier(self, book):
+    def has_rated_series(self, series):
+        return series in self.ratings_by_series
+
+    def _mark_book_helper(self, book, rating_fn):
+        if book.title in self.rating_by_title:
+            raise ValueError("Should not rate book with existing rating, programmer error!")
+
+        rating = BookRating.from_book(book)
+        rating_fn(rating)
+        rating.sync_with_db()
+        self.rating_by_title[book.title] = rating
+        if rating.series:
+            self.ratings_by_series[rating.series].append(rating)
+
+    def mark_book_with_tier(self, book, tier):
+        self._mark_book_helper(book, lambda rating: setattr(rating, 'tier', tier))
+
+    def mark_book_as_uninterested(self, book):
+        self._mark_book_helper(book, lambda rating: setattr(rating, 'interested', False))
+
+    def mark_book_as_interested(self, book):
+        self._mark_book_helper(book, lambda rating: setattr(rating, 'interested', True))
+    
+    def has_rated_book_or_series_as_f_tier_or_uninterested(self, book):
         matching_ratings = self.matching_ratings_for_book(book)
         for rating in matching_ratings:
             if rating.tier == Tier.F:
+                return True
+            if rating.interested == False:
                 return True
 
         return False
@@ -53,7 +78,7 @@ class BookRating:
 
     @classmethod
     def from_book(cls, book):
-        BookRating(title=book.title, series=book.series, tier=None, interested=None)
+        return BookRating(title=book.title, series=book.series, tier=None, interested=None)
 
     @classmethod
     def load_ratings_from_db(cls):
@@ -61,6 +86,9 @@ class BookRating:
         create_table_if_not_exists(conn)
         ratings = select_all_ratings(conn)
         conn.close()
+        for rating in ratings:
+            if rating.interested is None and rating.tier is None:
+                raise ValueError(f"Found invalid rating in DB with title ({rating.title}), please removing!")
 
         rating_by_title = { rating.title: rating for rating in ratings }
         ratings_by_series = defaultdict(list)
@@ -81,12 +109,10 @@ def create_table_if_not_exists(conn):
     try:
         c = conn.cursor()
         c.execute('''CREATE TABLE IF NOT EXISTS book_ratings 
-                    (
-                        id INTEGER PRIMARY KEY,
-                        title TEXT,
-                        series TEXT,
-                        rating INTEGER,
-                        interested BOOLEAN,
+                    (title TEXT PRIMARY KEY,
+                    series TEXT,
+                    tier TEXT,
+                    interested BOOLEAN
                     )''')
         conn.commit()
     except sqlite3.Error as e:
@@ -98,7 +124,10 @@ def insert_rating(conn, rating):
     sql = ''' INSERT INTO book_ratings(title,series,tier,interested)
               VALUES(?,?,?,?) '''
     cur = conn.cursor()
-    cur.execute(sql, (rating.title,rating.series,rating.tier.value,rating.interested))
+    tier_value = None
+    if rating.tier:
+        tier_value = rating.tier.value
+    cur.execute(sql, (rating.title, rating.series, tier_value, rating.interested))
     conn.commit()
     return cur.lastrowid
 
@@ -106,7 +135,7 @@ def rating_exists(conn, title):
     """ Check if a rating already exists in the database """
     sql = 'SELECT 1 FROM book_ratings WHERE title = ?'
     cur = conn.cursor()
-    cur.execute(sql, (title))
+    cur.execute(sql, (title,))
     return cur.fetchone() is not None
 
 def select_all_ratings(conn):
@@ -116,6 +145,9 @@ def select_all_ratings(conn):
 
     ratings = []
     for row in cur.fetchall():
-        rating = BookRating(title=row[0], series=row[1], tier=Tier(row[2]), interested=row[3])
+        tier = None
+        if row[2]:
+            tier = Tier(row[2])
+        rating = BookRating(title=row[0], series=row[1], tier=tier, interested=row[3])
         ratings.append(rating)
     return ratings 

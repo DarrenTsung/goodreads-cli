@@ -9,6 +9,7 @@ setup(
         'beautifulsoup4',
         'prettytable',
         'fuzzywuzzy',
+        'python-Levenshtein',  # Add python-Levenshtein to remove fuzzywuzzy warning
     ],
     entry_points={
         'console_scripts': [

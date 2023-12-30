@@ -3,8 +3,43 @@ import goodreads
 import pprint as pp
 import logging
 import sqlite3
+from collections import defaultdict
 
 DB_NAME = "books.db"
+
+class BooksBySeries:
+    def __init__(self, books_by_series):
+        self.books_by_series = books_by_series
+
+    @classmethod
+    def from_books(cls, books):
+        books_by_series = defaultdict(list)
+        for book in books.values():
+            if not book.series or not book.series_number:
+                continue
+
+            while len(books_by_series[book.series]) < book.series_number:
+                books_by_series[book.series].append(None)
+            books_by_series[book.series][book.series_number-1] = book
+        return BooksBySeries(books_by_series)
+
+    def items(self):
+        return self.books_by_series.items()
+
+    def _accumulate_series_attribute(self, series, attr_lambda):
+        if series not in self.books_by_series:
+            raise ValueError(f"Failed to find series ({series}) in BooksBySeries, programmer error!")
+
+        return sum(attr_lambda(book) for book in self.books_by_series[series] if book)
+
+    def total_pages_reported_by_kindle_for_series(self, series):
+        return self._accumulate_series_attribute(series, lambda book: book.pages_reported_by_kindle or 0)
+
+    def total_number_of_ratings_for_series(self, series):
+        return self._accumulate_series_attribute(series, lambda book: book.number_of_ratings)
+
+
+        
 
 class Book:
     def __init__(self, title, author):
@@ -27,8 +62,7 @@ class Book:
 
     def sync_with_db(self):
         conn = sqlite3.connect(DB_NAME)
-        if not book_exists(conn, self.title):
-            insert_book(conn, self)
+        insert_or_replace_book(conn, self)
         conn.close()
 
     def populate_from_goodreads(self):
@@ -50,6 +84,18 @@ class Book:
         self.series = goodreads_book.series
         self.series_number = goodreads_book.series_number
         logging.debug(f"Populated book from goodreads: {self.title} ({self.author}).")
+
+    def refresh_if_part_of_series_now_on_goodreads(self):
+        """ Returns True if refreshed. """
+        if self.series:
+            raise ValueError("refresh_if_part_of_series_now_on_goodreads should only be called when book has no series, programmer error!")
+
+        goodreads_book = goodreads.load_goodreads_book_from_url(self.goodreads_link)
+        if goodreads_book.series:
+            self._populate_from_goodreads_book(goodreads_book)
+            return True
+        else:
+            return False
     
     def find_books_from_series(self):
         series_link = goodreads.series_link_from_book(self)
@@ -92,9 +138,8 @@ def book_exists(conn, title):
     cur.execute(sql, (title,))
     return cur.fetchone() is not None
 
-def insert_book(conn, book):
-    """ Insert a new book into the books table """
-    sql = ''' INSERT INTO books(title,series,series_number,author,pages_reported_by_kindle,goodreads_link,average_rating,number_of_ratings)
+def insert_or_replace_book(conn, book):
+    sql = ''' INSERT OR REPLACE INTO books(title,series,series_number,author,pages_reported_by_kindle,goodreads_link,average_rating,number_of_ratings)
               VALUES(?,?,?,?,?,?,?,?) '''
     cur = conn.cursor()
     cur.execute(sql, (book.title, book.series, book.series_number, book.author, book.pages_reported_by_kindle, book.goodreads_link, book.average_rating, book.number_of_ratings))

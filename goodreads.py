@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import requests
+import time
 from bs4 import BeautifulSoup
 from fuzzywuzzy import fuzz
 from urllib.parse import urlparse
@@ -18,7 +19,7 @@ class GoodreadsBook:
         self.series_number = series_number
 
 def load_goodreads_book_from_url(url):
-    response = requests.get(url)
+    response = requests_get_with_retry(url)
     response.raise_for_status()
     soup = BeautifulSoup(response.text, 'html.parser')
     # Extract the number of pages and kindle edition text
@@ -28,7 +29,10 @@ def load_goodreads_book_from_url(url):
     # Extract the title
     book_title = soup.find('h1', {'data-testid': 'bookTitle'}).text.strip()
     # Extract the author
-    author_text = soup.find('span', {'class': 'ContributorLink__name', 'data-testid': 'name'}).text
+    authors = set()
+    for author_a_element in soup.find_all('a', {'class': 'ContributorLink'}):
+        authors.add(author_a_element.find('span', {'class': 'ContributorLink__name', 'data-testid': 'name'}).text)
+    author_text = ", ".join(authors)
     author = re.sub(r'\s+', ' ', author_text).strip()
     # Extract the series if it exists
     series_info = soup.find('h3', class_='Text Text__title3 Text__italic Text__regular Text__subdued')
@@ -71,7 +75,7 @@ def find_book_on_goodreads(book):
         return None
 
 def series_link_from_book(book):
-    response = requests.get(book.goodreads_link)
+    response = requests_get_with_retry(book.goodreads_link)
     response.raise_for_status()
     soup = BeautifulSoup(response.text, 'html.parser')
     series_link_element = soup.find('h3', class_='Text Text__title3 Text__italic Text__regular Text__subdued').find('a')
@@ -80,8 +84,15 @@ def series_link_from_book(book):
     else:
         return None
 
+def description_text_for_book(book):
+    response = requests_get_with_retry(book.goodreads_link)
+    response.raise_for_status()
+    soup = BeautifulSoup(response.text, 'html.parser')
+    description_text = soup.find('div', {'data-testid': 'description'}).text
+    return description_text
+
 def book_urls_from_series_url(series_url):
-    response = requests.get(series_url)
+    response = requests_get_with_retry(series_url)
     response.raise_for_status()
     soup = BeautifulSoup(response.text, 'html.parser')
     book_urls = []
@@ -100,7 +111,11 @@ def book_urls_from_series_url(series_url):
     return book_urls
 
 def search_result_for_book(book):
-    response = requests.get(f"https://www.goodreads.com/search?q={book.title}")
+    # Sanitize the search query by removing special characters
+    sanitized_title = re.sub(r'[^\w\s]', '', book.title)
+    sanitized_author = re.sub(r'[^\w\s]', '', book.author)
+    search_query = f"{sanitized_title}+{sanitized_author}"
+    response = requests_get_with_retry(f"https://www.goodreads.com/search?q={search_query}")
     response.raise_for_status()
     soup = BeautifulSoup(response.text, 'html.parser')
     max_score = 0
@@ -110,14 +125,16 @@ def search_result_for_book(book):
         author_link = tr.find('a', class_='authorName')
         if title_link and author_link:
             title_text = title_link.get('title')
+            title_text = re.sub(r'\s+', ' ', title_text).strip()
             author_name = author_link.find('span', itemprop='name').text
+            author_name = re.sub(r'\s+', ' ', author_name).strip()
             # Perform fuzzy matching for title and author
             title_ratio = fuzz.partial_ratio(book.title.lower(), title_text.lower())
             author_ratio = fuzz.partial_ratio(book.author.lower(), author_name.lower())
             # You can adjust the threshold according to your needs
             # Combine the scores
             combined_score = title_ratio + author_ratio
-            if combined_score > max_score:
+            if combined_score > 180 and combined_score > max_score:
                 max_score = combined_score
                 best_match = {
                     'title': title_text,
@@ -125,3 +142,14 @@ def search_result_for_book(book):
                     'link': f"https://www.goodreads.com{title_link.get('href')}"
                 }
     return best_match
+
+def requests_get_with_retry(url, max_retries=5, backoff_factor=0.3):
+    """Send a GET request and retry on 5xx errors with exponential backoff."""
+    retries = 0
+    while True:
+        response = requests.get(url)
+        if response.status_code // 100 != 5 or retries >= max_retries:
+            response.raise_for_status()
+            return response
+        retries += 1
+        time.sleep(backoff_factor * (2 ** (retries - 1)))
