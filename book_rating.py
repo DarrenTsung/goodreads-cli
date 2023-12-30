@@ -33,6 +33,17 @@ class BookRatings:
 
         return None
 
+    def has_directly_rated_book(self, book):
+        return book.title in self.rating_by_title
+    
+    def has_rated_book_or_series_as_f_tier(self, book):
+        matching_ratings = self.matching_ratings_for_book(book)
+        for rating in matching_ratings:
+            if rating.tier == Tier.F:
+                return True
+
+        return False
+
 class BookRating:
     def __init__(self, title, series, tier, interested):
         self.title = title

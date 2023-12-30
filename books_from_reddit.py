@@ -21,16 +21,10 @@ def find_books_from_table_in_reddit_releases_post(url):
             if series_match:
                 if series_match.lastindex == 3:  # Matched with parentheses
                     title = series_match.group(1).strip()
-                    series_name = series_match.group(2).strip()
-                    series_number = int(series_match.group(3).strip())
                 else:  # Matched without parentheses
                     title = series_match.group(0).strip()
-                    series_name = series_match.group(4).strip()
-                    series_number = int(series_match.group(5).strip())
             else:
                 title = full_title
-                series_name = None
-                series_number = None
             author = columns[1].get_text().strip()
-            books.append(Book(title, series_name, series_number, author))
+            books.append(Book(title, author))
     return books

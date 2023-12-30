@@ -7,11 +7,11 @@ import sqlite3
 DB_NAME = "books.db"
 
 class Book:
-    def __init__(self, title, series, series_number, author):
+    def __init__(self, title, author):
         self.title = title
-        self.series = series
-        self.series_number = series_number
         self.author = author
+        self.series = None
+        self.series_number = None
         self.pages_reported_by_kindle = None
         self.goodreads_link = None
         self.average_rating = None
@@ -38,11 +38,34 @@ class Book:
         goodreads_book = goodreads.find_book_on_goodreads(self)
         if not goodreads_book:
             raise ValueError("Failed to find book on goodreads.")
-
+        self._populate_from_goodreads_book(goodreads_book)
+    
+    def _populate_from_goodreads_book(self, goodreads_book):
+        self.title = goodreads_book.title
+        self.author = goodreads_book.author
         self.pages_reported_by_kindle = goodreads_book.pages_reported_by_kindle
         self.goodreads_link = goodreads_book.goodreads_link
         self.average_rating = goodreads_book.average_rating
         self.number_of_ratings = goodreads_book.number_of_ratings
+        self.series = goodreads_book.series
+        self.series_number = goodreads_book.series_number
+        logging.debug(f"Populated book from goodreads: {self.title} ({self.author}).")
+    
+    def find_books_from_series(self):
+        series_link = goodreads.series_link_from_book(self)
+        if not series_link:
+            raise ValueError(f"Failed to find series link for book ({self.title}).")
+
+        books = []
+        for book_url in goodreads.book_urls_from_series_url(series_link):
+            goodreads_book = goodreads.load_goodreads_book_from_url(book_url)
+
+            book = Book('', '')
+            book._populate_from_goodreads_book(goodreads_book)
+            books.append(book)
+
+        return books
+
 
 def create_table_if_not_exists(conn):
     """ create a table for storing book data """
@@ -85,9 +108,10 @@ def select_all_books(conn):
 
     books = []
     for row in cur.fetchall():
-        book = Book(title=row[0], series=row[1], series_number=row[2], author=row[3])
+        book = Book(title=row[0], author=row[3])
+        book.series = row[1]
+        book.series_number = row[2]
         book.pages_reported_by_kindle = row[4]
-        book.pages_reported_by_kindle = row[4] 
         book.goodreads_link = row[5]
         book.average_rating = row[6]
         book.number_of_ratings = row[7]
