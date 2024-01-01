@@ -2,6 +2,7 @@
 import goodreads
 import pprint as pp
 import logging
+import re
 import sqlite3
 from collections import defaultdict
 
@@ -38,6 +39,15 @@ class BooksBySeries:
     def total_number_of_ratings_for_series(self, series):
         return self._accumulate_series_attribute(series, lambda book: book.number_of_ratings)
 
+    def any_books_with_less_than_rating_in_series(self, series, rating):
+        if series not in self.books_by_series:
+            raise ValueError(f"Failed to find series ({series}) in BooksBySeries, programmer error!")
+
+        for book in self.books_by_series:
+            if book.average_rating < rating:
+                return True
+        return False
+    
 
         
 

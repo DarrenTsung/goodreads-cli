@@ -6,6 +6,7 @@ from fuzzywuzzy import fuzz
 from urllib.parse import urlparse
 import re
 import pprint as pp
+from utils import stripped_title, stripped
 
 class GoodreadsBook:
     def __init__(self, title, author, pages_reported_by_kindle, goodreads_link, average_rating, number_of_ratings, series, series_number):
@@ -23,9 +24,13 @@ def load_goodreads_book_from_url(url):
     response.raise_for_status()
     soup = BeautifulSoup(response.text, 'html.parser')
     # Extract the number of pages and kindle edition text
-    pages_text = soup.find('p', {'data-testid': 'pagesFormat'}).text.strip()
-    pages_number_match = re.search(r'\d+', pages_text)
-    pages_number = int(pages_number_match.group()) if pages_number_match else None
+    pages_number = None
+    pages_element = soup.find('p', {'data-testid': 'pagesFormat'})
+    if pages_element:
+        pages_text = pages_element.text.strip()
+        pages_number_match = re.search(r'\d+', pages_text)
+        if pages_number_match:
+            pages_number = int(pages_number_match.group()) 
     # Extract the title
     book_title = soup.find('h1', {'data-testid': 'bookTitle'}).text.strip()
     # Extract the author
@@ -70,7 +75,7 @@ def find_book_on_goodreads(book):
     # Use the search_result_for_book to get the best match
     best_match = search_result_for_book(book)
     if best_match:
-        return load_goodreads_book_from_url(best_match['link'])
+        return load_goodreads_book_from_url(best_match)
     else:
         return None
 
@@ -111,45 +116,84 @@ def book_urls_from_series_url(series_url):
     return book_urls
 
 def search_result_for_book(book):
-    # Sanitize the search query by removing special characters
-    sanitized_title = re.sub(r'[^\w\s]', '', book.title)
-    sanitized_author = re.sub(r'[^\w\s]', '', book.author)
-    search_query = f"{sanitized_title}+{sanitized_author}"
-    response = requests_get_with_retry(f"https://www.goodreads.com/search?q={search_query}")
-    response.raise_for_status()
-    soup = BeautifulSoup(response.text, 'html.parser')
-    max_score = 0
-    best_match = None
-    for tr in soup.find_all('tr', {'itemtype': 'http://schema.org/Book'}):
-        title_link = tr.find('a', title=True)
-        author_link = tr.find('a', class_='authorName')
-        if title_link and author_link:
+    book_authors = [a.strip() for a in book.author.split('&')]
+    search_queries = [f"{stripped(book.title)}+{stripped(book.author)}", stripped(book.title)]
+    for search_query in search_queries:
+        response = requests_get_with_retry(f"https://www.goodreads.com/search?q={search_query}")
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        max_score = 0
+        best_match = None
+        for tr in soup.find_all('tr', {'itemtype': 'http://schema.org/Book'}):
+            title_link = tr.find('a', title=True)
             title_text = title_link.get('title')
             title_text = re.sub(r'\s+', ' ', title_text).strip()
-            author_name = author_link.find('span', itemprop='name').text
-            author_name = re.sub(r'\s+', ' ', author_name).strip()
-            # Perform fuzzy matching for title and author
-            title_ratio = fuzz.partial_ratio(book.title.lower(), title_text.lower())
-            author_ratio = fuzz.partial_ratio(book.author.lower(), author_name.lower())
-            # You can adjust the threshold according to your needs
-            # Combine the scores
-            combined_score = title_ratio + author_ratio
-            if combined_score > 180 and combined_score > max_score:
-                max_score = combined_score
-                best_match = {
-                    'title': title_text,
-                    'author': author_name,
-                    'link': f"https://www.goodreads.com{title_link.get('href')}"
-                }
-    return best_match
 
-def requests_get_with_retry(url, max_retries=5, backoff_factor=0.3):
-    """Send a GET request and retry on 5xx errors with exponential backoff."""
+            book_item_authors = []
+            for a_element in tr.find_all('a', class_='authorName'):
+                author = a_element.find('span', itemprop='name').text 
+                author = re.sub(r'\s+', ' ', author).strip()
+                book_item_authors.append(author)
+
+            max_author_ratio = 0
+            for item_author in book_item_authors:
+                for book_author in book_authors:
+                    author_ratio = fuzz.partial_ratio(stripped(book_author), stripped(item_author))
+                    if author_ratio > max_author_ratio:
+                        max_author_ratio = author_ratio
+
+            title_ratio = fuzz.partial_ratio(stripped_title(book.title), stripped_title(title_text))
+
+            # pp.pp(title_text)
+            # pp.pp(book_item_authors)
+
+            # pp.pp(f"max_author_ratio: {max_author_ratio}")
+            # pp.pp(f"title_ratio: {title_ratio}")
+
+            # Combine the scores with more weight on the title score
+            combined_score = title_ratio + max_author_ratio
+            # Adjust the threshold according to the new scoring system
+            if max_author_ratio >= 90 and combined_score > max_score:
+                max_score = combined_score
+                best_match = f"https://www.goodreads.com{title_link.get('href')}"
+        if best_match:
+            return best_match
+
+def requests_get_with_retry(url, max_retries=5, backoff_factor=0.3, headers=None):
+    """Send a GET request with a session and retry on errors with exponential backoff, with browser-like headers."""
+    session = requests.Session()
+    # Set default headers to mimic a browser if none are provided
+    if headers is None:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'DNT': '1',  # Do Not Track Request Header
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+        }
+    session.headers.update(headers)
     retries = 0
     while True:
-        response = requests.get(url)
-        if response.status_code // 100 != 5 or retries >= max_retries:
+        response = session.get(url, allow_redirects=True, headers=headers)
+        if response.status_code // 100 == 2:
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, 'html.parser')
+
+            # Dunno what this is, but implementing this for reddit redirects.
+            shreddit_redirect = soup.find("shreddit-redirect")
+            if not shreddit_redirect:
+                return response
+
+            if 'href' not in shreddit_redirect.attrs:
+                return response
+            
+            url = f"https://reddit.com{shreddit_redirect['href']}"
+        elif retries >= max_retries:
             response.raise_for_status()
             return response
-        retries += 1
-        time.sleep(backoff_factor * (2 ** (retries - 1)))
+        elif response.status_code // 100 == 5:
+            retries += 1
+            time.sleep(backoff_factor * (2 ** (retries - 1)))
+        else:
+            response.raise_for_status()
