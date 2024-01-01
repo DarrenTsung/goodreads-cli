@@ -2,6 +2,7 @@
 import requests
 import time
 from bs4 import BeautifulSoup
+import logging
 from fuzzywuzzy import fuzz
 from urllib.parse import urlparse
 import re
@@ -20,6 +21,7 @@ class GoodreadsBook:
         self.series_number = series_number
 
 def load_goodreads_book_from_url(url):
+    # logging.debug(f"Started load from goodreads for {url}..")
     response = requests_get_with_retry(url)
     response.raise_for_status()
     soup = BeautifulSoup(response.text, 'html.parser')

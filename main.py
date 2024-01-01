@@ -9,7 +9,7 @@ import pprint as pp
 import logging.config
 import textwrap
 from collections import defaultdict
-from book import Book, BooksBySeries
+from book import Book, BooksBySeries, BooksByTitle, has_book
 from utils import stripped_title, stripped
 import goodreads
 from book_rating import BookRating, Tier
@@ -65,8 +65,10 @@ def main():
     args = parser.parse_args()
 
     # Load books from the database first
-    books = {book.title: book for book in Book.load_books_from_db()}
-    logging.info(f"Loaded {len(books)} books from the DB.")
+    books_by_id = {book.id: book for book in Book.load_books_from_db()}
+    books_by_title = BooksByTitle(books_by_id.values())
+
+    logging.info(f"Loaded {len(books_by_id)} books from the DB.")
     if args.command == 'input':
         if args.follow_reddit_releases and not args.reddit_releases_url:
             raise ValueError("Shouldn't specify --follow-reddit-releases without --reddit-releases-url!")
@@ -78,34 +80,11 @@ def main():
                 books_from_reddit_releases_post = find_books_from_table_in_reddit_releases_post(current_releases_url)
                 logging.info(f"Found {len(books_from_reddit_releases_post)} books in reddit releases url: {current_releases_url}!")
                 for new_book in books_from_reddit_releases_post:
-                    if new_book.title in books:
-                        continue
-
-                    found_book_match = False
-                    authors = new_book.author.split('&')
-                    for book in books.values():
-                        authors_match = True
-                        for author in authors:
-                            author_in_book = False
-                            for book_author in book.author.split('&'):
-                                if fuzz.partial_ratio(stripped(author), stripped(book_author)) >= 90:
-                                    author_in_book = True
-
-                            if not author_in_book:
-                                authors_match = False
-                                break
-                        if authors_match:
-                            exact_title_in = stripped_title(new_book.title) in stripped_title(book.title)
-                            title_close_enough = fuzz.partial_ratio(stripped_title(new_book.title), stripped_title(book.title)) >= 90
-                            if exact_title_in or title_close_enough:
-                                found_book_match = True
-                                break
-
-                    if not found_book_match:
+                    if not books_by_title.has_book(new_book):
                         logging.debug(f"Found new book: {new_book.title} ({new_book.author}).")
                         new_books[new_book.title] = new_book
 
-                process_new_books(new_books, books)
+                process_new_books(new_books, books_by_id, books_by_title)
                 new_books.clear()
                 if args.follow_reddit_releases:
                     current_releases_url = follow_reddit_releases_link(current_releases_url)
@@ -120,14 +99,14 @@ def main():
             manual_book = Book(title=title, author=author)
             new_books[manual_book.title] = manual_book
             logging.info(f"Processing new book: {title} ({author})..")
-            process_new_books(new_books, books)
+            process_new_books(new_books, books_by_id, books_by_title)
         else:
             logging.error("Please provide an input parameter (e.g. --reddit-releases-url).")
             exit(1)
 
-        logging.info(f"Finished processing books from input, DB now contains {len(books)} books.")
+        logging.info(f"Finished processing books from input, DB now contains {len(books_by_id)} books.")
     elif args.command == 'refresh-books':
-        books_by_series = BooksBySeries.from_books(books)
+        books_by_series = BooksBySeries.from_books(books_by_id.values())
         book_refresh_metadata = BookRefreshMetadata.load_from_db()
         # Check if any new books in series.
         for series, books_in_series in books_by_series.items():
@@ -137,14 +116,15 @@ def main():
             logging.info(f"Refreshing series: {series}..")
             found_books_from_series = books_in_series[0].find_books_from_series()
             for book in found_books_from_series:
-                if book.title in books:
+                if has_book(books_by_id, books_by_title, book):
                     continue
                 logging.info(f"Found new book in series ({series}): {book.title}!")
                 book.sync_with_db()
-                books[book.title] = book
+                books_by_id[book.id] = book
+                books_by_title.add(book)
             book_refresh_metadata.handle_series_refreshed(series)
 
-        for book in books.values():
+        for book in books_by_id.values():
             if book.series:
                 continue
             
@@ -157,19 +137,20 @@ def main():
                 book.sync_with_db()
                 found_books_from_series = book.find_books_from_series()
                 for book in found_books_from_series:
-                    if book.title in books:
+                    if has_book(books_by_id, books_by_title, book):
                         continue
                     logging.info(f"Found new book in series ({series}): {book.title}!")
                     book.sync_with_db()
-                    books[book.title] = book
+                    books_by_id[book.id] = book
+                    books_by_title.add(book)
             book_refresh_metadata.handle_title_refreshed(book.title)
     elif args.command == 'rate-continuous':
         book_ratings = BookRating.load_ratings_from_db()
-        books_by_series = BooksBySeries.from_books(books)
+        books_by_series = BooksBySeries.from_books(books_by_id.values())
     
         # Go through books in order so that first book of series is visited first.
         books_in_order = []
-        for book in books.values():
+        for book in books_by_id.values():
             if not book.series:
                 books_in_order.append(book)
         for _series, books_in_series in books_by_series.items():
@@ -186,7 +167,7 @@ def main():
                 book_ratings.mark_book_as_uninterested(book)
                 continue
 
-            if books_by_series.any_books_with_less_than_rating_in_series(book.series, 4):
+            if books_by_series.any_books_with_less_than_rating_in_series(book, 4):
                 book_ratings.mark_book_as_uninterested(book)
                 continue
 
@@ -263,9 +244,10 @@ def main():
             print("")
             print("")
 
-def process_new_books(new_books, books):
-    # These authors have weird books that break the script, just ignore them for now.
-    banned_authors = set(["Vasily Mahanenko"])
+def process_new_books(new_books, books_by_id, books_by_title):
+    # These authors have partially translated series that make the script think
+    # the series are missing books, just ignore them for now.
+    banned_authors = set(["Vasily Mahanenko", "Pavel Kornev"])
     new_books = [book for book in new_books.values() if book.author not in banned_authors]
     
     book_refresh_metadata = BookRefreshMetadata.load_from_db()
@@ -277,11 +259,12 @@ def process_new_books(new_books, books):
             logging.info(f"Ignoring book not found on goodreads: {book.title} ({book.author}).")
             continue
 
-        if book.title in books:
+        if has_book(books_by_id, books_by_title, book):
             continue
 
         logging.info(f"Added new book: {book.title}.")
-        books[book.title] = book
+        books_by_id[book.id] = book
+        books_by_title.add(book)
         book.sync_with_db()
 
         if book.series:
@@ -292,16 +275,17 @@ def process_new_books(new_books, books):
             logging.info(f"Refreshing series: {book.series}..")
             found_books_from_series = book.find_books_from_series()
             for book in found_books_from_series:
-                if book.title in books:
+                if has_book(books_by_id, books_by_title, book):
                     continue
                 logging.info(f"Found new book in series ({book.series}): {book.title}!")
                 book.sync_with_db()
-                books[book.title] = book
+                books_by_id[book.id] = book
+                books_by_title.add(book)
             book_refresh_metadata.handle_series_refreshed(book.series)
     
 
     # Populate missing books in series found.
-    books_by_series = BooksBySeries.from_books(books)
+    books_by_series = BooksBySeries.from_books(books_by_id.values())
 
     for series, books_in_series in books_by_series.items():
         any_book_in_series = None
@@ -317,7 +301,6 @@ def process_new_books(new_books, books):
 
         if all_books_populated:
             continue
-        pp.pp(books_in_series)
 
         logging.debug(f"Found series ({series}) with missing books, fetching books in series from goodreads..")
         
@@ -326,7 +309,8 @@ def process_new_books(new_books, books):
             while len(books_in_series) < book.series_number:
                 books_in_series.append(None)
             books_in_series[book.series_number-1] = book
-            books[book.title] = book
+            books_by_id[book.id] = book
+            books_by_title.add(book)
             book.sync_with_db()
         book_refresh_metadata.handle_series_refreshed(series)
 
