@@ -163,7 +163,7 @@ def search_result_for_book(book):
         if best_match:
             return best_match
 
-def requests_get_with_retry(url, max_retries=5, backoff_factor=0.3, headers=None):
+def requests_get_with_retry(url, max_retries=10, backoff_factor=0.5, headers=None):
     """Send a GET request with a session and retry on errors with exponential backoff, with browser-like headers."""
     session = requests.Session()
     # Set default headers to mimic a browser if none are provided
