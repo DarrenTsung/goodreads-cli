@@ -22,6 +22,8 @@ class BooksBySeries:
                 continue
 
             books_by_series[book.series].append(book)
+        for series, books in books_by_series.items():
+            books_by_series[series] = sorted(books, key=lambda book: book.series_number)
         return BooksBySeries(books_by_series)
 
     def items(self):
