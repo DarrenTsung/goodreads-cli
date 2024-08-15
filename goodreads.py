@@ -47,10 +47,12 @@ def load_goodreads_book_from_url(url):
     series_number = None
     if series_info and 'aria-label' in series_info.attrs:
         series_text = series_info['aria-label']
-        series_match = re.match(r'Book (\d+) in the (.+) series', series_text)
+        series_match = re.match(r'Book (.*) in the (.+) series', series_text)
         if series_match:
-            series_number = int(series_match.group(1))
+            series_number = series_match.group(1)
             series_name = series_match.group(2)
+        else:
+            logging.debug(f"Found unmatched series text: {series_text}, ignoring series information!")
 
     # Extract the average rating
     average_rating_div = soup.find('div', class_='RatingStatistics__rating')
@@ -106,7 +108,7 @@ def book_urls_from_series_url(series_url):
     for book_element in soup.find_all('div', {'class': 'listWithDividers__item'}):
         found_any_book_match = False
         for h3_element in book_element.find_all('h3'):
-            if re.match(r'^Book (\d+)$', h3_element.text.strip()):
+            if h3_element.text.strip().startswith('Book '):
                 found_any_book_match = True
 
         # There are some collections / random things in the series list, ignore.

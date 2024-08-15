@@ -18,12 +18,10 @@ class BooksBySeries:
     def from_books(cls, books):
         books_by_series = defaultdict(list)
         for book in books:
-            if not book.series or not book.series_number:
+            if not book.series:
                 continue
 
-            while len(books_by_series[book.series]) < book.series_number:
-                books_by_series[book.series].append(None)
-            books_by_series[book.series][book.series_number-1] = book
+            books_by_series[book.series].append(book)
         return BooksBySeries(books_by_series)
 
     def items(self):
@@ -49,7 +47,7 @@ class BooksBySeries:
             if book.series not in self.books_by_series:
                 raise ValueError(f"Failed to find series ({book.series}) in BooksBySeries, programmer error!")
 
-            for book in self.books_by_series:
+            for book in self.books_by_series[book.series]:
                 if book.average_rating < rating:
                     return True
 
@@ -77,7 +75,13 @@ def authors_match(stripped_authors_a, authors_b):
     return True
 
 def has_book(books_by_id, books_by_title, book):
+    # if there's an id, then it's populated from goodreads.
     if book.id:
+        # If the book in the DB doesn't have a series and this one
+        # does, let's pretend like we don't have a book so it'll get updated.
+        if book.series and book.id in books_by_id and not books_by_id[book.id].series:
+            return False
+
         return book.id in books_by_id
     else:
         return books_by_title.has_book(book)
@@ -202,7 +206,7 @@ def create_table_if_not_exists(conn):
                      (id INTEGER PRIMARY KEY,
                       title TEXT,
                       series TEXT,
-                      series_number INTEGER,
+                      series_number TEXT,
                       author TEXT,
                       pages_reported_by_kindle INTEGER,
                       goodreads_link TEXT,

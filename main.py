@@ -124,7 +124,8 @@ def main():
                 books_by_title.add(book)
             book_refresh_metadata.handle_series_refreshed(series)
 
-        for book in books_by_id.values():
+        books_to_iterate = [book for book in books_by_id.values()]
+        for book in books_to_iterate:
             if book.series:
                 continue
             
@@ -282,42 +283,6 @@ def process_new_books(new_books, books_by_id, books_by_title):
                 books_by_id[book.id] = book
                 books_by_title.add(book)
             book_refresh_metadata.handle_series_refreshed(book.series)
-    
-
-    # Populate missing books in series found.
-    books_by_series = BooksBySeries.from_books(books_by_id.values())
-
-    for series, books_in_series in books_by_series.items():
-        any_book_in_series = None
-        all_books_populated = True
-        for book in books_in_series:
-            if book:
-                any_book_in_series = book
-            else:
-                all_books_populated = False
-
-        if not any_book_in_series:
-            raise ValueError("Programmer error, how did we get an empty books_in_series array?")
-
-        if all_books_populated:
-            continue
-
-        logging.debug(f"Found series ({series}) with missing books, fetching books in series from goodreads..")
-        
-        found_books_from_series = any_book_in_series.find_books_from_series()
-        for book in found_books_from_series:
-            while len(books_in_series) < book.series_number:
-                books_in_series.append(None)
-            books_in_series[book.series_number-1] = book
-            books_by_id[book.id] = book
-            books_by_title.add(book)
-            book.sync_with_db()
-        book_refresh_metadata.handle_series_refreshed(series)
-
-        # Check all books are populated now..
-        for book in books_in_series:
-            if not book:
-                raise ValueError("Programmer error, how did we get an empty book in books_in_series after loading?")
 
 if __name__ == "__main__":
     main()
