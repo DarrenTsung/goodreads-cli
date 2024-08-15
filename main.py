@@ -61,7 +61,8 @@ def main():
     refresh_books_parser.add_argument('--manual', type=str, help='Input "Title, Author" as a string')
 
     # Subcommand 'rate-continuous'
-    _rate_continuous_parser = subparsers.add_parser('rate-continuous', help='Rate books in the DB without a rating')
+    rate_continuous_parser = subparsers.add_parser('rate-continuous', help='Rate books in the DB without a rating')
+    rate_continuous_parser.add_argument('--author', type=str, help='Input author to rate books for')
 
     args = parser.parse_args()
 
@@ -157,14 +158,20 @@ def main():
     elif args.command == 'rate-continuous':
         book_ratings = BookRating.load_ratings_from_db()
         books_by_series = BooksBySeries.from_books(books_by_id.values())
-    
+
         # Go through books in order so that first book of series is visited first.
         books_in_order = []
         for book in books_by_id.values():
+            if args.author and args.author not in book.author:
+                continue
+
             if not book.series:
                 books_in_order.append(book)
         for _series, books_in_series in books_by_series.items():
             for book in books_in_series:
+                if args.author and args.author not in book.author:
+                    continue
+
                 books_in_order.append(book)
 
         for book in books_in_order:
