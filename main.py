@@ -9,7 +9,7 @@ import pprint as pp
 import logging.config
 import textwrap
 from collections import defaultdict
-from book import Book, BooksBySeries, BooksByTitle, has_book
+from book import Book, BooksBySeries, BooksByTitle, find_book
 from utils import stripped_title, stripped
 import goodreads
 from book_rating import BookRating, Tier
@@ -53,6 +53,7 @@ def main():
     input_parser.add_argument('--reddit-releases-url', type=str, help='Input URL of a Reddit releases post')
     input_parser.add_argument('--follow-reddit-releases', action='store_true', help='Follow Reddit releases links to previous months')
     input_parser.add_argument('--manual', type=str, help='Input "Title, Author" as a string')
+    input_parser.add_argument('--manual-goodreads', type=str, help='Input Goodreads URL')
 
     # Subcommand 'refresh-books'
     refresh_books_parser = subparsers.add_parser('refresh-books', help='Refresh books DB')
@@ -100,6 +101,14 @@ def main():
             new_books[manual_book.title] = manual_book
             logging.info(f"Processing new book: {title} ({author})..")
             process_new_books(new_books, books_by_id, books_by_title)
+        elif args.manual_goodreads:
+            goodreads_url = args.manual_goodreads.strip()
+            goodreads_book = goodreads.load_goodreads_book_from_url(goodreads_url)
+            manual_book = Book(title=goodreads_book.title, author=goodreads_book.author)
+            manual_book._populate_from_goodreads_book(goodreads_book)
+            new_books[manual_book.title] = manual_book
+            logging.info(f"Processing new book from Goodreads: {manual_book.title} ({manual_book.author})..")
+            process_new_books(new_books, books_by_id, books_by_title)
         else:
             logging.error("Please provide an input parameter (e.g. --reddit-releases-url).")
             exit(1)
@@ -116,7 +125,7 @@ def main():
             logging.info(f"Refreshing series: {series}..")
             found_books_from_series = books_in_series[0].find_books_from_series()
             for book in found_books_from_series:
-                if has_book(books_by_id, books_by_title, book):
+                if find_book(books_by_id, books_by_title, book):
                     continue
                 logging.info(f"Found new book in series ({series}): {book.title}!")
                 book.sync_with_db()
@@ -138,7 +147,7 @@ def main():
                 book.sync_with_db()
                 found_books_from_series = book.find_books_from_series()
                 for book in found_books_from_series:
-                    if has_book(books_by_id, books_by_title, book):
+                    if find_book(books_by_id, books_by_title, book):
                         continue
                     logging.info(f"Found new book in series ({series}): {book.title}!")
                     book.sync_with_db()
@@ -260,7 +269,9 @@ def process_new_books(new_books, books_by_id, books_by_title):
             logging.info(f"Ignoring book not found on goodreads: {book.title} ({book.author}).")
             continue
 
-        if has_book(books_by_id, books_by_title, book):
+        book_in_db = find_book(books_by_id, books_by_title, book)
+        if book_in_db:
+            logging.debug(f"Book already in DB, found: {book_in_db.title} ({book_in_db.author}) (id: {book_in_db.id}).")
             continue
 
         logging.info(f"Added new book: {book.title}.")
@@ -276,7 +287,7 @@ def process_new_books(new_books, books_by_id, books_by_title):
             logging.info(f"Refreshing series: {book.series}..")
             found_books_from_series = book.find_books_from_series()
             for book in found_books_from_series:
-                if has_book(books_by_id, books_by_title, book):
+                if find_book(books_by_id, books_by_title, book):
                     continue
                 logging.info(f"Found new book in series ({book.series}): {book.title}!")
                 book.sync_with_db()

@@ -54,7 +54,7 @@ class BooksBySeries:
         return False
     
 def stripped_authors(authors):
-    return [stripped(a) for a in re.split('&\s,', authors)]
+    return [stripped(a) for a in re.split(r'[&\s,]', authors)]
 
 def authors_match(stripped_authors_a, authors_b):
     stripped_authors_b = stripped_authors(authors_b)
@@ -74,7 +74,7 @@ def authors_match(stripped_authors_a, authors_b):
 
     return True
 
-def has_book(books_by_id, books_by_title, book):
+def find_book(books_by_id, books_by_title, book):
     # if there's an id, then it's populated from goodreads.
     if book.id:
         # If the book in the DB doesn't have a series and this one
@@ -82,22 +82,25 @@ def has_book(books_by_id, books_by_title, book):
         if book.series and book.id in books_by_id and not books_by_id[book.id].series:
             return False
 
-        return book.id in books_by_id
+        try:
+            return books_by_id[book.id]
+        except KeyError:
+            return None
     else:
-        return books_by_title.has_book(book)
+        return books_by_title.get_book_matching(book)
 
 class BooksByTitle:
     def __init__(self, books):
         self.books_by_title = defaultdict(list)
         for book in books:
             self.books_by_title[book.title].append(book)
-    
-    def has_book(self, query_book):
+
+    def get_book_matching(self, query_book):
         stripped_query_authors = stripped_authors(query_book.author)
         if query_book.title in self.books_by_title:
             for book in self.books_by_title[query_book.title]:
                 if authors_match(stripped_query_authors, book.author):
-                    return True
+                    return book
 
         for title, books in self.books_by_title.items():
             for book in books:
@@ -106,8 +109,11 @@ class BooksByTitle:
                     exact_title_in = query_book_stripped_title in stripped_title(title)
                     title_close_enough = fuzz.partial_ratio(query_book_stripped_title, stripped_title(book.title)) >= 90
                     if exact_title_in or title_close_enough:
-                        return True
-        return False
+                        return book
+        return None
+    
+    def has_book(self, query_book):
+        self.get_book_matching(query_book) is not None
     
     def add(self, book):
         self.books_by_title[book.title].append(book)
