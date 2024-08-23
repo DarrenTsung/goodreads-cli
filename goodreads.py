@@ -20,21 +20,31 @@ class GoodreadsBook:
         self.series = series
         self.series_number = series_number
 
-def load_goodreads_book_from_url(url):
-    # logging.debug(f"Started load from goodreads for {url}..")
-    response = requests_get_with_retry(url)
-    response.raise_for_status()
-    soup = BeautifulSoup(response.text, 'html.parser')
-    # Extract the number of pages and kindle edition text
-    pages_number = None
-    pages_element = soup.find('p', {'data-testid': 'pagesFormat'})
-    if pages_element:
-        pages_text = pages_element.text.strip()
-        pages_number_match = re.search(r'\d+', pages_text)
-        if pages_number_match:
-            pages_number = int(pages_number_match.group()) 
-    # Extract the title
-    book_title = soup.find('h1', {'data-testid': 'bookTitle'}).text.strip()
+def load_goodreads_book_from_url(url, max_retries=3, backoff_factor=0.5):
+    retries = 0
+    while retries < max_retries:
+        response = requests_get_with_retry(url)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        # Extract the number of pages and kindle edition text
+        pages_number = None
+        pages_element = soup.find('p', {'data-testid': 'pagesFormat'})
+        if pages_element:
+            pages_text = pages_element.text.strip()
+            pages_number_match = re.search(r'\d+', pages_text)
+            if pages_number_match:
+                pages_number = int(pages_number_match.group()) 
+        # Extract the title
+        book_title_element = soup.find('h1', {'data-testid': 'bookTitle'})
+        if book_title_element:
+            book_title = book_title_element.text.strip()
+            break
+        else:
+            retries += 1
+            time.sleep(backoff_factor * (2 ** (retries - 1)))
+    else:
+        raise AttributeError("Title element not found after retries")
+
     # Extract the author
     authors = set()
     for author_a_element in soup.find_all('a', {'class': 'ContributorLink'}):
