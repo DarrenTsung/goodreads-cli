@@ -208,15 +208,20 @@ def requests_get_with_retry(url, max_retries=10, backoff_factor=0.5, headers=Non
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')
 
-            # Dunno what this is, but implementing this for reddit redirects.
-            shreddit_redirect = soup.find("shreddit-redirect")
-            if not shreddit_redirect:
+            # This is used so https://www.reddit.com/r/litrpg/comments/1l1mosi/ gets
+            # redirected to https://www.reddit.com/r/litrpg/comments/1l1mosi/june_2025_releases_promotions/
+            canonical_url_div = soup.find("div", id="canonical-url-updater")
+            if not canonical_url_div:
                 return response
 
-            if 'href' not in shreddit_redirect.attrs:
+            if 'value' not in canonical_url_div.attrs:
                 return response
-            
-            url = f"https://reddit.com{shreddit_redirect['href']}"
+
+            if url == canonical_url_div['value']:
+                return response
+
+            print(f"Redirected from {url} to {canonical_url_div['value']}")
+            url = canonical_url_div['value']
         elif retries >= max_retries:
             response.raise_for_status()
             return response
