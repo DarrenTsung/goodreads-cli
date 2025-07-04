@@ -63,6 +63,7 @@ def main():
     # Subcommand 'rate-continuous'
     rate_continuous_parser = subparsers.add_parser('rate-continuous', help='Rate books in the DB without a rating')
     rate_continuous_parser.add_argument('--author', type=str, help='Input author to rate books for')
+    rate_continuous_parser.add_argument('--verbose', action='store_true', help='Enable verbose output for filtering decisions')
 
     args = parser.parse_args()
 
@@ -165,26 +166,41 @@ def main():
             if args.author and args.author not in book.author:
                 continue
 
+            if args.verbose:
+                print(f"\nEvaluating: {book.title} ({book.author})")
+
             if book_ratings.has_directly_rated_book(book):
+                if args.verbose:
+                    print(f"  ❌ Filtered: Book already directly rated")
                 continue
 
             # Note that this doesn't mark the book as uninterested twice because it checks if
             # the book has a direct rating above.
             if book_ratings.has_rated_book_or_series_as_f_tier_or_uninterested(book):
+                if args.verbose:
+                    print(f"  ❌ Filtered: Book or series rated as F tier or uninterested")
                 book_ratings.mark_book_as_uninterested(book)
                 continue
 
             if books_by_series.any_books_with_less_than_rating_in_series(book, 4):
+                if args.verbose:
+                    print(f"  ❌ Filtered: Series contains books with rating less than 4")
                 book_ratings.mark_book_as_uninterested(book)
                 continue
 
             if book_ratings.has_rated_series(book.series):
+                if args.verbose:
+                    print(f"  ❌ Filtered: Series already rated")
                 continue
 
             book_has_enough_pages = book.pages_reported_by_kindle and book.pages_reported_by_kindle >= MIN_PAGES_FOR_CONSIDERATION
             series_has_enough_pages = book.series and books_by_series.total_pages_reported_by_kindle_for_series(book.series) >= MIN_PAGES_FOR_CONSIDERATION
             has_enough_pages = book_has_enough_pages or series_has_enough_pages
             if not has_enough_pages:
+                if args.verbose:
+                    book_pages = book.pages_reported_by_kindle or "unknown"
+                    series_pages = books_by_series.total_pages_reported_by_kindle_for_series(book.series) if book.series else "N/A"
+                    print(f"  ❌ Filtered: Not enough pages (book: {book_pages}, series: {series_pages}, min: {MIN_PAGES_FOR_CONSIDERATION})")
                 # Revisit when book / series has enough pages..
                 continue
 
@@ -192,9 +208,15 @@ def main():
             series_has_enough_ratings = book.series and books_by_series.total_number_of_ratings_for_series(book.series) >= MIN_RATINGS_FOR_CONSIDERATION
             has_enough_ratings = book_has_enough_ratings or series_has_enough_ratings
             if not has_enough_ratings:
+                if args.verbose:
+                    book_ratings_count = book.number_of_ratings or 0
+                    series_ratings_count = books_by_series.total_number_of_ratings_for_series(book.series) if book.series else 0
+                    print(f"  ❌ Filtered: Not enough ratings (book: {book_ratings_count}, series: {series_ratings_count}, min: {MIN_RATINGS_FOR_CONSIDERATION})")
                 # Revisit when book / series has enough ratings..
                 continue
 
+            if args.verbose:
+                print(f"  ✅ Included: Passed all filters")
             filtered_books.append(book)
 
         # Sort filtered books by popularity (number of reviews) - most popular first
@@ -207,10 +229,22 @@ def main():
 
         filtered_books.sort(key=get_review_count, reverse=True)
 
+        if args.verbose:
+            total_books = len(books_by_id)
+            included_books = len(filtered_books)
+            filtered_out_books = total_books - included_books
+            print(f"\n=== FILTERING SUMMARY ===")
+            print(f"Total books evaluated: {total_books}")
+            print(f"Books filtered out: {filtered_out_books}")
+            print(f"Books included for rating: {included_books}")
+            print(f"========================\n")
+
         # Process books in popularity order
         for book in filtered_books:
             # It's possible that we just rated the series, so check again.
             if book_ratings.has_rated_series(book.series):
+                if args.verbose:
+                    print(f"Skipping '{book.title}': series is already rated.")
                 continue
 
             # Present the book / series to the user.
