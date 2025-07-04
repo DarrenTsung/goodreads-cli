@@ -286,12 +286,11 @@ def process_new_books(new_books, books_by_id, books_by_title):
         book_in_db = find_book(books_by_id, books_by_title, book)
         if book_in_db:
             logging.debug(f"Book already in DB, found: {book_in_db.title} ({book_in_db.author}) (id: {book_in_db.id}).")
-            continue
-
-        logging.info(f"Added new book: {book.title}.")
-        books_by_id[book.id] = book
-        books_by_title.add(book)
-        book.sync_with_db()
+        else:
+            logging.info(f"Added new book: {book.title}.")
+            books_by_id[book.id] = book
+            books_by_title.add(book)
+            book.sync_with_db()
 
         if book.series:
             # Check if any new books in series.
