@@ -257,7 +257,7 @@ def main():
                 series_ranking = 999 if book.series_number == "1" else 0
                 return (books_by_series.total_number_of_ratings_for_series(book.series), series_ranking)
             else:
-                return (book.number_of_ratings or 0, "")
+                return (book.number_of_ratings or 0, 0)
 
         filtered_books.sort(key=get_review_count, reverse=True)
 
