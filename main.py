@@ -159,22 +159,12 @@ def main():
         book_ratings = BookRating.load_ratings_from_db()
         books_by_series = BooksBySeries.from_books(books_by_id.values())
 
-        # Go through books in order so that first book of series is visited first.
-        books_in_order = []
+        # Filter all books first
+        filtered_books = []
         for book in books_by_id.values():
             if args.author and args.author not in book.author:
                 continue
 
-            if not book.series:
-                books_in_order.append(book)
-        for _series, books_in_series in books_by_series.items():
-            for book in books_in_series:
-                if args.author and args.author not in book.author:
-                    continue
-
-                books_in_order.append(book)
-
-        for book in books_in_order:
             if book_ratings.has_directly_rated_book(book):
                 continue
 
@@ -203,6 +193,23 @@ def main():
             has_enough_ratings = book_has_enough_ratings or series_has_enough_ratings
             if not has_enough_ratings:
                 # Revisit when book / series has enough ratings..
+                continue
+
+            filtered_books.append(book)
+
+        # Sort filtered books by popularity (number of reviews) - most popular first
+        def get_review_count(book):
+            if book.series:
+                return books_by_series.total_number_of_ratings_for_series(book.series)
+            else:
+                return book.number_of_ratings or 0
+
+        filtered_books.sort(key=get_review_count, reverse=True)
+
+        # Process books in popularity order
+        for book in filtered_books:
+            # It's possible that we just rated the series, so check again.
+            if book_ratings.has_rated_series(book.series):
                 continue
 
             # Present the book / series to the user.

@@ -11,6 +11,12 @@ pip install .
 python3 ./main.py input --follow-reddit-releases --reddit-releases-url https://www.reddit.com/r/litrpg/comments/1eheyaq/august_2024_releases_promotions/
 ```
 
+Rating all books:
+
+```
+python3 ./main.py rate-continuous
+```
+
 Adding a book and rating it:
 
 ```
