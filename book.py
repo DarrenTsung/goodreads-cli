@@ -42,7 +42,7 @@ class BooksBySeries:
         return self._accumulate_series_attribute(series, lambda book: book.number_of_ratings)
 
     def any_books_with_less_than_rating_in_series(self, book, rating):
-        if book.average_rating < rating:
+        if book.has_rating_less_than(rating):
             return True
 
         if book.series:
@@ -50,7 +50,7 @@ class BooksBySeries:
                 raise ValueError(f"Failed to find series ({book.series}) in BooksBySeries, programmer error!")
 
             for book in self.books_by_series[book.series]:
-                if book.average_rating < rating:
+                if book.has_rating_less_than(rating):
                     return True
 
         return False
@@ -204,6 +204,16 @@ class Book:
             books.append(book)
 
         return books
+    
+    def has_rating_less_than(self, rating):
+        # Check that the book is rated / has been released.
+        if self.number_of_ratings <= 10:
+            return False
+
+        if self.average_rating is None or self.average_rating == 0:
+            return False
+
+        return self.average_rating < rating
 
 
 def create_table_if_not_exists(conn):
