@@ -60,6 +60,10 @@ def main():
     refresh_books_parser.add_argument('--reddit-releases-url', type=str, help='Input URL of a Reddit releases post')
     refresh_books_parser.add_argument('--manual', type=str, help='Input "Title, Author" as a string')
 
+    # Subcommand 'refresh-unreleased'
+    refresh_unreleased_parser = subparsers.add_parser('refresh-unreleased', help='Refresh all books with no ratings')
+    refresh_unreleased_parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
+
     # Subcommand 'rate-continuous'
     rate_continuous_parser = subparsers.add_parser('rate-continuous', help='Rate books in the DB without a rating')
     rate_continuous_parser.add_argument('--author', type=str, help='Input author to rate books for')
@@ -119,6 +123,7 @@ def main():
     elif args.command == 'refresh-books':
         books_by_series = BooksBySeries.from_books(books_by_id.values())
         book_refresh_metadata = BookRefreshMetadata.load_from_db()
+
         # Check if any new books in series.
         for series, books_in_series in books_by_series.items():
             if not book_refresh_metadata.should_refresh_series(series):
@@ -156,6 +161,33 @@ def main():
                     books_by_id[book.id] = book
                     books_by_title.add(book)
             book_refresh_metadata.handle_title_refreshed(book.title)
+    elif args.command == 'refresh-unreleased':
+        book_refresh_metadata = BookRefreshMetadata.load_from_db()
+        
+        # Get all books with no ratings
+        unreleased_books = [book for book in books_by_id.values() if book.number_of_ratings == 0]
+        logging.info(f"Found {len(unreleased_books)} unreleased books to refresh.")
+        
+        for book in unreleased_books:
+            if not book_refresh_metadata.should_refresh_title(book.title):
+                if args.verbose:
+                    logging.info(f"Skipping {book.title} - too soon to refresh")
+                continue
+
+            logging.info(f"Refreshing unreleased book: {book.title}..")
+            try:
+                # Load fresh data from Goodreads
+                goodreads_book = goodreads.load_goodreads_book_from_url(book.goodreads_link)
+                book._populate_from_goodreads_book(goodreads_book)
+                book.sync_with_db()
+                logging.info(f"Updated book: {book.title} - now has {book.number_of_ratings} ratings")
+            except Exception as e:
+                logging.error(f"Failed to refresh book {book.title}: {str(e)}")
+                continue
+            
+            book_refresh_metadata.handle_title_refreshed(book.title)
+            
+        logging.info("Finished refreshing unreleased books")
     elif args.command == 'rate-continuous':
         book_ratings = BookRating.load_ratings_from_db()
         books_by_series = BooksBySeries.from_books(books_by_id.values())
