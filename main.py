@@ -67,6 +67,7 @@ def main():
     # Subcommand 'rate-continuous'
     rate_continuous_parser = subparsers.add_parser('rate-continuous', help='Rate books in the DB without a rating')
     rate_continuous_parser.add_argument('--author', type=str, help='Input author to rate books for')
+    rate_continuous_parser.add_argument('--series', type=str, help='Input series name to rate books for')
     rate_continuous_parser.add_argument('--verbose', action='store_true', help='Enable verbose output for filtering decisions')
 
     args = parser.parse_args()
@@ -196,6 +197,9 @@ def main():
         filtered_books = []
         for book in books_by_id.values():
             if args.author and args.author not in book.author:
+                continue
+
+            if args.series and (not book.series or args.series.lower() not in book.series.lower()):
                 continue
 
             if args.verbose:
