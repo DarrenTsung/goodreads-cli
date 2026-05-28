@@ -162,6 +162,7 @@ cython_debug/
 .aider*
 
 *.db
+.goodreads_waf_cookies.json
 .DS_Store
 .vscode
 

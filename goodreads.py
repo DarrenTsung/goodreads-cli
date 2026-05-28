@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import requests
 import time
+import json
+import os
 from bs4 import BeautifulSoup
 import logging
 from fuzzywuzzy import fuzz
@@ -8,6 +10,62 @@ from urllib.parse import urlparse
 import re
 import pprint as pp
 from utils import stripped_title, stripped
+
+# Goodreads now sits behind an AWS WAF JavaScript challenge (responds with HTTP 202 and
+# x-amzn-waf-action: challenge). Plain `requests` can't solve it, so we use a headless
+# browser once to mint an `aws-waf-token` cookie and reuse it across requests. The token
+# is bound to the User-Agent, so the same UA must be used everywhere.
+_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+_WAF_COOKIE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".goodreads_waf_cookies.json")
+_session = None
+
+
+def _apply_cookies(session, cookies):
+    for cookie in cookies:
+        session.cookies.set(cookie['name'], cookie['value'], domain=cookie.get('domain'))
+
+
+def _get_session():
+    """Return a process-wide session, seeded with any WAF cookies cached from a previous run."""
+    global _session
+    if _session is None:
+        _session = requests.Session()
+        if os.path.exists(_WAF_COOKIE_FILE):
+            try:
+                with open(_WAF_COOKIE_FILE) as f:
+                    _apply_cookies(_session, json.load(f))
+            except (json.JSONDecodeError, OSError):
+                pass
+    return _session
+
+
+def _is_waf_challenge(response):
+    return response.status_code == 202 or response.headers.get('x-amzn-waf-action') == 'challenge'
+
+
+def _solve_waf_challenge(url):
+    """Launch a headless browser to solve the AWS WAF challenge for `url`, persist and return its cookies."""
+    from playwright.sync_api import sync_playwright
+
+    logging.info("Goodreads returned a WAF challenge; solving it with a headless browser..")
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        try:
+            context = browser.new_context(user_agent=_USER_AGENT)
+            page = context.new_page()
+            page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            # Give the challenge JS time to run, mint the token, and reload.
+            page.wait_for_timeout(6000)
+            cookies = context.cookies()
+        finally:
+            browser.close()
+
+    try:
+        with open(_WAF_COOKIE_FILE, 'w') as f:
+            json.dump(cookies, f)
+    except OSError:
+        pass
+    return cookies
 
 class GoodreadsBook:
     def __init__(self, title, author, pages_reported_by_kindle, goodreads_link, average_rating, number_of_ratings, series, series_number):
@@ -189,11 +247,13 @@ def search_result_for_book(book, max_retries=3, backoff_factor=0.5):
 
 def requests_get_with_retry(url, max_retries=10, backoff_factor=0.5, headers=None):
     """Send a GET request with a session and retry on errors with exponential backoff, with browser-like headers."""
-    session = requests.Session()
-    # Set default headers to mimic a browser if none are provided
+    # Reuse a process-wide session so a solved WAF token (cookie) is shared across requests.
+    session = _get_session()
+    # Set default headers to mimic a browser if none are provided. The User-Agent must match
+    # the one used to solve the WAF challenge, since the token cookie is bound to it.
     if headers is None:
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
+            'User-Agent': _USER_AGENT,
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.5',
             'DNT': '1',  # Do Not Track Request Header
@@ -202,8 +262,15 @@ def requests_get_with_retry(url, max_retries=10, backoff_factor=0.5, headers=Non
         }
     session.headers.update(headers)
     retries = 0
+    waf_solve_attempts = 0
     while True:
         response = session.get(url, allow_redirects=True, headers=headers)
+        if _is_waf_challenge(response):
+            if waf_solve_attempts >= 2:
+                raise RuntimeError(f"Unable to clear Goodreads WAF challenge for {url}")
+            waf_solve_attempts += 1
+            _apply_cookies(session, _solve_waf_challenge(url))
+            continue
         if response.status_code // 100 == 2:
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')

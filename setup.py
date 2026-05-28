@@ -10,6 +10,7 @@ setup(
         'prettytable',
         'fuzzywuzzy',
         'python-Levenshtein',  # Add python-Levenshtein to remove fuzzywuzzy warning
+        'playwright',  # Headless browser to solve Goodreads' AWS WAF challenge
     ],
     entry_points={
         'console_scripts': [
