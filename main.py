@@ -14,7 +14,7 @@ from utils import stripped_title, stripped
 import goodreads
 from book_rating import BookRating, Tier
 from book_refresh_metadata import BookRefreshMetadata
-from books_from_reddit import find_books_from_table_in_reddit_releases_post, follow_reddit_releases_link
+from books_from_reddit import find_books_from_table_in_reddit_releases_post, follow_reddit_releases_link, find_release_thread_urls_from_wiki
 
 log_level = 'DEBUG'
 logging.config.dictConfig({
@@ -51,6 +51,7 @@ def main():
     # Subcommand 'input'
     input_parser = subparsers.add_parser('input', help='Process input from various sources')
     input_parser.add_argument('--reddit-releases-url', type=str, help='Input URL of a Reddit releases post')
+    input_parser.add_argument('--reddit-releases-wiki-url', type=str, help='Input URL of the Reddit new-releases wiki index (processes every monthly thread it links to)')
     input_parser.add_argument('--follow-reddit-releases', action='store_true', help='Follow Reddit releases links to previous months')
     input_parser.add_argument('--manual', type=str, help='Input "Title, Author" as a string')
     input_parser.add_argument('--manual-goodreads', type=str, help='Input Goodreads URL')
@@ -82,18 +83,27 @@ def main():
             raise ValueError("Shouldn't specify --follow-reddit-releases without --reddit-releases-url!")
 
         new_books = {}
-        if args.reddit_releases_url:
+
+        def process_releases_post(releases_url):
+            books_from_reddit_releases_post = find_books_from_table_in_reddit_releases_post(releases_url)
+            logging.info(f"Found {len(books_from_reddit_releases_post)} books in reddit releases url: {releases_url}!")
+            for new_book in books_from_reddit_releases_post:
+                if not books_by_title.has_book(new_book):
+                    logging.debug(f"Found new book: {new_book.title} ({new_book.author}).")
+                    new_books[new_book.title] = new_book
+
+            process_new_books(new_books, books_by_id, books_by_title)
+            new_books.clear()
+
+        if args.reddit_releases_wiki_url:
+            release_thread_urls = find_release_thread_urls_from_wiki(args.reddit_releases_wiki_url)
+            logging.info(f"Found {len(release_thread_urls)} release threads in wiki: {args.reddit_releases_wiki_url}!")
+            for releases_url in release_thread_urls:
+                process_releases_post(releases_url)
+        elif args.reddit_releases_url:
             current_releases_url = args.reddit_releases_url
             while current_releases_url:
-                books_from_reddit_releases_post = find_books_from_table_in_reddit_releases_post(current_releases_url)
-                logging.info(f"Found {len(books_from_reddit_releases_post)} books in reddit releases url: {current_releases_url}!")
-                for new_book in books_from_reddit_releases_post:
-                    if not books_by_title.has_book(new_book):
-                        logging.debug(f"Found new book: {new_book.title} ({new_book.author}).")
-                        new_books[new_book.title] = new_book
-
-                process_new_books(new_books, books_by_id, books_by_title)
-                new_books.clear()
+                process_releases_post(current_releases_url)
                 if args.follow_reddit_releases:
                     current_releases_url = follow_reddit_releases_link(current_releases_url)
                 else:
