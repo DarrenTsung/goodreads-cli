@@ -113,40 +113,63 @@ def write_md(profile, rows, total_classified):
 
 HTML_HEAD = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Recommendations by preference fit</title>
 <style>
-  :root {{ color-scheme: light dark; }}
-  body {{ font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 2rem; }}
-  h1 {{ margin-bottom: .2rem; }}
-  .meta {{ color: #888; margin-bottom: 1.2rem; }}
+  :root {{
+    --bg: #f6f7f9; --card: #fff; --ink: #1f2328; --muted: #6b7280;
+    --line: #e6e8eb; --accent: #4a90d9; --hover: #f0f6fd;
+  }}
+  @media (prefers-color-scheme: dark) {{
+    :root {{ --bg:#0d1117; --card:#161b22; --ink:#e6edf3; --muted:#8b949e; --line:#272c33; --hover:#1b2330; }}
+  }}
+  * {{ box-sizing: border-box; }}
+  body {{ font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+          margin: 0; padding: 2.5rem clamp(1rem, 4vw, 3rem); background: var(--bg); color: var(--ink); }}
+  header {{ max-width: 1200px; margin: 0 auto 1.5rem; }}
+  h1 {{ margin: 0 0 .3rem; font-size: 1.7rem; letter-spacing: -.02em; }}
+  .meta {{ color: var(--muted); font-size: .9rem; }}
+  .wrap {{ max-width: 1200px; margin: 0 auto; background: var(--card); border: 1px solid var(--line);
+           border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px #0000000d, 0 8px 24px #0000000a; }}
   table {{ border-collapse: collapse; width: 100%; }}
-  th, td {{ padding: 8px 10px; border-bottom: 1px solid #8884; vertical-align: top; text-align: left; }}
-  th {{ position: sticky; top: 0; background: Canvas; cursor: pointer; user-select: none; border-bottom: 2px solid #8888; }}
-  th:hover {{ color: #4a90d9; }}
-  td.num {{ text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }}
-  .fit-pos {{ color: #1a7f37; font-weight: 600; }}
-  .fit-neg {{ color: #c0392b; font-weight: 600; }}
-  .fit-zero {{ color: #888; }}
-  .tier {{ font-weight: 700; border-radius: 4px; padding: 1px 7px; }}
-  .tier-S {{ background: #6f42c1; color: #fff; }}
-  .tier-A {{ background: #1a7f37; color: #fff; }}
-  .tier-B {{ background: #b08800; color: #fff; }}
-  .tier-F {{ background: #c0392b; color: #fff; }}
-  .title {{ font-weight: 600; }}
-  .series {{ color: #888; font-size: 13px; }}
-  .themes {{ font-size: 12px; color: #666; }}
-  .themes .pos {{ color: #1a7f37; }} .themes .neg {{ color: #c0392b; }}
-  .why {{ color: #444; max-width: 40rem; }}
-  tr:hover td {{ background: #4a90d915; }}
+  th, td {{ padding: 12px 16px; text-align: left; vertical-align: top; }}
+  thead th {{ position: sticky; top: 0; z-index: 1; background: var(--card); cursor: pointer;
+              user-select: none; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em;
+              color: var(--muted); border-bottom: 1px solid var(--line); white-space: nowrap; }}
+  thead th:hover {{ color: var(--accent); }}
+  thead th::after {{ content: " \\2195"; opacity: .3; font-size: .8em; }}
+  tbody tr {{ border-top: 1px solid var(--line); }}
+  tbody tr:first-child {{ border-top: none; }}
+  tbody tr:hover {{ background: var(--hover); }}
+  td.num {{ text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--muted); }}
+  td.rank {{ color: var(--muted); font-size: .85rem; }}
+  .fit {{ display: inline-block; min-width: 2.4em; text-align: center; font-weight: 700;
+          border-radius: 999px; padding: 2px 9px; font-variant-numeric: tabular-nums; }}
+  .fit-pos {{ background: #1a7f3719; color: #1a7f37; }}
+  .fit-neg {{ background: #c0392b19; color: #c0392b; }}
+  .fit-zero {{ background: #8884; color: var(--muted); }}
+  @media (prefers-color-scheme: dark) {{ .fit-pos {{ color:#3fb950; }} .fit-neg {{ color:#f85149; }} }}
+  .tier {{ display: inline-block; min-width: 1.6em; text-align: center; font-weight: 700; font-size: .8rem;
+           border-radius: 6px; padding: 2px 8px; color: #fff; }}
+  .tier-S {{ background: #8957e5; }} .tier-A {{ background: #1a7f37; }}
+  .tier-B {{ background: #bf8700; }} .tier-F {{ background: #c0392b; }}
+  .title {{ font-weight: 600; font-size: 1rem; }}
+  .title a {{ color: inherit; text-decoration: none; }}
+  .title a:hover {{ color: var(--accent); text-decoration: underline; }}
+  .sub {{ color: var(--muted); font-size: .8rem; margin-top: 2px; }}
+  .rating-stars {{ color: #e3a008; }}
+  .why {{ color: var(--muted); max-width: 34rem; font-size: .9rem; }}
 </style></head><body>
-<h1>Recommendations by preference fit</h1>
-<div class="meta">Generated {generated} from {total} classified candidates. Score = sum of your theme weights for each matched theme. Click a header to sort.</div>
-<table id="t"><thead><tr>
-<th data-type="num">#</th><th data-type="num">Fit</th><th>Pred</th><th>Title</th><th>Series</th><th data-type="num">Rating</th><th data-type="num">Pages</th><th>Themes</th><th>Why</th>
+<header>
+  <h1>Recommendations by preference fit</h1>
+  <div class="meta">Generated {generated} &middot; {total} books ranked &middot; score = sum of your theme weights &middot; click a header to sort</div>
+</header>
+<div class="wrap"><table id="t"><thead><tr>
+<th data-type="num">#</th><th data-type="num">Fit</th><th>Pred</th><th>Title / Series</th><th data-type="num">Rating</th><th data-type="num">Pages</th><th>Why</th>
 </tr></thead><tbody>
 """
 
-HTML_TAIL = """</tbody></table>
+HTML_TAIL = """</tbody></table></div>
 <script>
 const t = document.getElementById('t');
 t.querySelectorAll('th').forEach((th, i) => th.addEventListener('click', () => {
@@ -172,28 +195,31 @@ def write_html(profile, rows, total_classified):
         fit = row["fit_score"]
         fit_cls = "fit-pos" if fit > 0 else "fit-neg" if fit < 0 else "fit-zero"
         tier = row.get("predicted_tier") or "?"
-        theme_html = ", ".join(
-            f'<span class="{"pos" if weights.get(t,0)>0 else "neg" if weights.get(t,0)<0 else ""}">'
-            f'{html.escape(t)}{weights.get(t,0):+d}</span>'
-            for t in row["tags"]
-        )
-        series = html.escape(b.series or "")
-        if row.get("series_count", 1) > 1:
-            series += f' <span class="series">(+{row["series_count"] - 1} more)</span>'
-        title = html.escape(b.title)
+
+        # Combined Title / Series cell: show the series name when it's a series,
+        # otherwise the standalone title. A series shows its volume count as a subline.
+        if b.series:
+            primary = html.escape(b.series)
+            n = row.get("series_count", 1)
+            sub = f'{n} book{"s" if n != 1 else ""} in series'
+        else:
+            primary = html.escape(b.title)
+            sub = "standalone"
         if b.goodreads_link:
-            title = f'<a href="{html.escape(b.goodreads_link)}" target="_blank" rel="noopener">{title}</a>'
+            primary = f'<a href="{html.escape(b.goodreads_link)}" target="_blank" rel="noopener">{primary}</a>'
+        title_sort = html.escape(b.series or b.title)
+
+        stars = "&#9733;" * round(row["avg_rating"]) + "&#9734;" * (5 - round(row["avg_rating"]))
         out.append(
             f'<tr>'
-            f'<td class="num">{i}</td>'
-            f'<td class="num {fit_cls}" data-sort="{fit}">{fit:+d}</td>'
+            f'<td class="num rank">{i}</td>'
+            f'<td class="num" data-sort="{fit}"><span class="fit {fit_cls}">{fit:+d}</span></td>'
             f'<td><span class="tier tier-{tier}">{tier}</span></td>'
-            f'<td class="title" data-sort="{html.escape(b.title)}">{title}</td>'
-            f'<td class="series">{series}</td>'
-            f'<td class="num" data-sort="{row["avg_rating"]}">{row["avg_rating"]:.2f} '
-            f'<span class="series">({row["num_ratings"]:,})</span></td>'
+            f'<td><div class="title">{primary}</div><div class="sub">{sub}</div></td>'
+            f'<td class="num" data-sort="{row["avg_rating"]}">'
+            f'<span class="rating-stars" title="{row["avg_rating"]:.2f}">{stars}</span>'
+            f'<div class="sub">{row["avg_rating"]:.2f} &middot; {row["num_ratings"]:,} ratings</div></td>'
             f'<td class="num" data-sort="{row["pages"]}">{row["pages"]:,}</td>'
-            f'<td class="themes">{theme_html}</td>'
             f'<td class="why">{html.escape(row["reasoning"])}</td>'
             f'</tr>'
         )
