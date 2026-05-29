@@ -1,0 +1,339 @@
+{
+  "generated_at": "2026-05-29T00:22:01.258355+00:00",
+  "model": "sonnet",
+  "summary": "This reader is drawn to progression fantasy with creative, crunchy mechanics\u2014especially card- or tier-based systems\u2014and to underdogs who find clever, unconventional paths rather than simply grinding harder. They value genuine literary and philosophical depth, serious tone, and subverted tropes (particularly the chosen-one archetype). They consistently reject dungeon cores, harem content, cultivation/xianxia aesthetics, VR settings, and comedic parody, and show strong fatigue with second-chance/reincarnation plots and generic power-fantasy alpha-male protagonists.",
+  "taxonomy": [
+    {
+      "tag": "crunchy_progression",
+      "description": "Detailed, trackable skill/stat/level systems where mechanical choices feel meaningful and rewarding to follow"
+    },
+    {
+      "tag": "card_based_system",
+      "description": "Magic or power systems built around cards, decks, or collectible ability tiles"
+    },
+    {
+      "tag": "unique_magic_system",
+      "description": "Inventive, non-standard power/magic systems that feel fresh rather than generic stat-and-class fare"
+    },
+    {
+      "tag": "underdog_clever_path",
+      "description": "Protagonist starts disadvantaged (weak class, detrimental talent, low birth) and succeeds through cleverness or unconventional methods rather than raw grinding"
+    },
+    {
+      "tag": "philosophical_literary_depth",
+      "description": "Thematic ambition beyond the power fantasy\u2014introspective worldbuilding, moral complexity, or literary self-awareness"
+    },
+    {
+      "tag": "subverted_chosen_one",
+      "description": "Deliberately playing against or inverting the 'destined hero' archetype in a meaningful way"
+    },
+    {
+      "tag": "academy_training_arc",
+      "description": "Significant portion of the story set in a school, academy, or institutional training environment"
+    },
+    {
+      "tag": "system_apocalypse",
+      "description": "Earth or a familiar world is suddenly integrated into a game-like system with monsters, levels, and survival stakes"
+    },
+    {
+      "tag": "serious_tone",
+      "description": "Dark or gritty world tone; stakes feel real; not played for jokes or genre parody"
+    },
+    {
+      "tag": "non_human_protagonist",
+      "description": "MC is a non-human entity\u2014golem, monster, tree, AI\u2014rather than a human or standard fantasy race"
+    },
+    {
+      "tag": "dungeon_core",
+      "description": "MC is reborn as, or manages, a dungeon\u2014accumulating monsters and traps to defend against adventurers"
+    },
+    {
+      "tag": "harem",
+      "description": "Protagonist acquires a romantic/sexual harem of partners as a recurring story element"
+    },
+    {
+      "tag": "cultivation_xianxia",
+      "description": "Eastern-inspired cultivation path, martial sects, body tempering, and qi/energy refinement as core progression"
+    },
+    {
+      "tag": "vr_trapped_game",
+      "description": "Story takes place inside a virtual reality game, either voluntarily or due to being trapped"
+    },
+    {
+      "tag": "second_chance_reincarnation",
+      "description": "Protagonist is reborn or sent back in time with memories of a previous life, enabling a deliberate 'redo' plot"
+    },
+    {
+      "tag": "comedic_parody_tone",
+      "description": "Heavy reliance on meta-humor, genre parody, or satirical framing as the primary mode rather than genuine adventure"
+    },
+    {
+      "tag": "slice_of_life_crafting",
+      "description": "Primary story focus on a peaceful craft or profession (brewing, farming, cooking, blacksmithing) rather than combat progression"
+    },
+    {
+      "tag": "generic_power_fantasy",
+      "description": "MC rapidly becomes dominant with little genuine intellectual or strategic challenge; alpha-male archetype with no real underdog arc"
+    },
+    {
+      "tag": "kingdom_building",
+      "description": "Significant focus on constructing and managing a settlement, city, or kingdom as a core loop"
+    },
+    {
+      "tag": "isekai_portal_fantasy",
+      "description": "Protagonist is transported from the real world into a fantasy realm"
+    }
+  ],
+  "weights": {
+    "crunchy_progression": 2,
+    "card_based_system": 2,
+    "unique_magic_system": 2,
+    "underdog_clever_path": 2,
+    "philosophical_literary_depth": 2,
+    "subverted_chosen_one": 1,
+    "academy_training_arc": 1,
+    "system_apocalypse": 1,
+    "serious_tone": 1,
+    "non_human_protagonist": 0,
+    "dungeon_core": -2,
+    "harem": -2,
+    "cultivation_xianxia": -2,
+    "vr_trapped_game": -2,
+    "second_chance_reincarnation": 1,
+    "comedic_parody_tone": -1,
+    "slice_of_life_crafting": -1,
+    "generic_power_fantasy": 0,
+    "kingdom_building": -1,
+    "isekai_portal_fantasy": 0
+  },
+  "themes": [
+    {
+      "tag": "crunchy_progression",
+      "description": "Detailed, trackable skill/stat/level systems where mechanical choices feel meaningful and rewarding to follow",
+      "weight": 2,
+      "rationale": "Nearly every S/A-tier pick features dense, engaging progression mechanics the reader clearly engages with closely",
+      "evidence": [
+        "The Legend of Randidly Ghosthound",
+        "All the Skills",
+        "Chain of Feathers"
+      ]
+    },
+    {
+      "tag": "card_based_system",
+      "description": "Magic or power systems built around cards, decks, or collectible ability tiles",
+      "weight": 2,
+      "rationale": "Three independent A/S-tier picks all feature card-based systems\u2014a level of clustering that signals a specific mechanical preference beyond general creativity",
+      "evidence": [
+        "All the Skills",
+        "Theft of Decks",
+        "Chain of Feathers"
+      ]
+    },
+    {
+      "tag": "unique_magic_system",
+      "description": "Inventive, non-standard power/magic systems that feel fresh rather than generic stat-and-class fare",
+      "weight": 2,
+      "rationale": "Liked books consistently feature mechanically novel systems; F/SKIP books are disproportionately generic stat-and-class designs",
+      "evidence": [
+        "Industrial Strength Magic",
+        "The Problem With Princesses",
+        "Mark of the Fool"
+      ]
+    },
+    {
+      "tag": "underdog_clever_path",
+      "description": "Protagonist starts disadvantaged (weak class, detrimental talent, low birth) and succeeds through cleverness or unconventional methods rather than raw grinding",
+      "weight": 2,
+      "rationale": "A recurring structural hook in nearly all top-tier picks; absent or inverted in most F-tier picks",
+      "evidence": [
+        "Mark of the Fool",
+        "Path of Ascension",
+        "Chain of Feathers",
+        "Theft of Decks",
+        "Loremaster"
+      ]
+    },
+    {
+      "tag": "philosophical_literary_depth",
+      "description": "Thematic ambition beyond the power fantasy\u2014introspective worldbuilding, moral complexity, or literary self-awareness",
+      "weight": 2,
+      "rationale": "Worth the Candle is the only S-tier title that is not also a top crunchy-progression pick; it earns its place entirely on depth. The reader appears to reward books that have something to say.",
+      "evidence": [
+        "Worth the Candle",
+        "Through Adversity",
+        "Enemy of the World"
+      ]
+    },
+    {
+      "tag": "subverted_chosen_one",
+      "description": "Deliberately playing against or inverting the 'destined hero' archetype in a meaningful way",
+      "weight": 1,
+      "rationale": "Mark of the Fool (rejected mark), Worth the Candle (meta tabletop origin), Enemy of the World (mankind's most hated man as savior) all share this structure and all scored A or S",
+      "evidence": [
+        "Mark of the Fool",
+        "Worth the Candle",
+        "Enemy of the World"
+      ]
+    },
+    {
+      "tag": "academy_training_arc",
+      "description": "Significant portion of the story set in a school, academy, or institutional training environment",
+      "weight": 1,
+      "rationale": "Multiple A/S picks feature academy arcs; the reader seems to enjoy the structured progression and social dynamics they provide",
+      "evidence": [
+        "Mark of the Fool",
+        "Silvers",
+        "Loremaster"
+      ]
+    },
+    {
+      "tag": "system_apocalypse",
+      "description": "Earth or a familiar world is suddenly integrated into a game-like system with monsters, levels, and survival stakes",
+      "weight": 1,
+      "rationale": "Several A/B picks use this setting, but the reader also DNF'd many generic system-apocalypse books\u2014the tag is an attractor only when paired with strong execution or a unique hook",
+      "evidence": [
+        "The Legend of Randidly Ghosthound",
+        "Pyresouls Apocalypse",
+        "Defiance of the Fall"
+      ]
+    },
+    {
+      "tag": "serious_tone",
+      "description": "Dark or gritty world tone; stakes feel real; not played for jokes or genre parody",
+      "weight": 1,
+      "rationale": "The grittiest books (A Soldier's Life, Chain of Feathers) scored high; heavily comedic/satirical books (DCC, This Quest is Broken, BuyMort) were F or SKIP",
+      "evidence": [
+        "A Soldier's Life",
+        "Chain of Feathers",
+        "Defiance of the Fall"
+      ]
+    },
+    {
+      "tag": "non_human_protagonist",
+      "description": "MC is a non-human entity\u2014golem, monster, tree, AI\u2014rather than a human or standard fantasy race",
+      "weight": 0,
+      "rationale": "User override: evidence was only B-tier (Tree of Aeons, Threadbare, Large Chests) \u2014 not a strong enough positive to count; treated as neutral.",
+      "evidence": [
+        "Tree of Aeons",
+        "Everybody Loves Large Chests",
+        "Threadbare"
+      ]
+    },
+    {
+      "tag": "dungeon_core",
+      "description": "MC is reborn as, or manages, a dungeon\u2014accumulating monsters and traps to defend against adventurers",
+      "weight": -2,
+      "rationale": "Multiple clear SKIP signals across unrelated series; the reader passes on dungeon-core premises without reading",
+      "evidence": [
+        "Netherworld Manor",
+        "Shadowcroft Academy For Dungeons",
+        "Lich Core",
+        "The Wolf King's Lair 5"
+      ]
+    },
+    {
+      "tag": "harem",
+      "description": "Protagonist acquires a romantic/sexual harem of partners as a recurring story element",
+      "weight": -2,
+      "rationale": "Consistently SKIPped across many series spanning different settings; blurb language about 'beautiful women' is a reliable reject signal for this reader",
+      "evidence": [
+        "Towers of Acalia",
+        "War on Highlands",
+        "Lion's Quest",
+        "Reborn as a Fire Mage"
+      ]
+    },
+    {
+      "tag": "cultivation_xianxia",
+      "description": "Eastern-inspired cultivation path, martial sects, body tempering, and qi/energy refinement as core progression",
+      "weight": -2,
+      "rationale": "Every cultivation-flavored entry is SKIP; the reader shows no interest in the aesthetic even when combined with system or LitRPG elements",
+      "evidence": [
+        "Dragon Heart",
+        "The Way",
+        "Cultivator vs. System",
+        "Celestial Blacksmith"
+      ]
+    },
+    {
+      "tag": "vr_trapped_game",
+      "description": "Story takes place inside a virtual reality game, either voluntarily or due to being trapped",
+      "weight": -2,
+      "rationale": "User override: reader strongly dislikes VR/trapped-in-game settings.",
+      "evidence": [
+        "Awaken Online (Catharsis)",
+        "Sky Realms Online",
+        "Crystal Shards Online"
+      ]
+    },
+    {
+      "tag": "second_chance_reincarnation",
+      "description": "Protagonist is reborn or sent back in time with memories of a previous life, enabling a deliberate 'redo' plot",
+      "weight": 1,
+      "rationale": "User override: reader likes second-chance/reincarnation plots.",
+      "evidence": [
+        "Apocalypse Redux",
+        "Past Life Hero",
+        "Second Chance Swordsman",
+        "System Reborn"
+      ]
+    },
+    {
+      "tag": "comedic_parody_tone",
+      "description": "Heavy reliance on meta-humor, genre parody, or satirical framing as the primary mode rather than genuine adventure",
+      "weight": -1,
+      "rationale": "Dungeon Crawler Carl\u2014one of the genre's most acclaimed series\u2014was F'd; This Quest is Broken and Sentenced to Troll were also rejected, pointing to an aversion to self-aware comedy as a primary register",
+      "evidence": [
+        "Dungeon Crawler Carl",
+        "This Quest is Broken!",
+        "Sentenced to Troll",
+        "BuyMort"
+      ]
+    },
+    {
+      "tag": "slice_of_life_crafting",
+      "description": "Primary story focus on a peaceful craft or profession (brewing, farming, cooking, blacksmithing) rather than combat progression",
+      "weight": -1,
+      "rationale": "Battle Mage Farmer, Jake's Magical Market, and Hawkin's Magic Beers are all SKIP; the reader wants meaningful combat stakes alongside any crafting element",
+      "evidence": [
+        "Battle Mage Farmer",
+        "Jake's Magical Market",
+        "Hawkin's Magic Beers"
+      ]
+    },
+    {
+      "tag": "generic_power_fantasy",
+      "description": "MC rapidly becomes dominant with little genuine intellectual or strategic challenge; alpha-male archetype with no real underdog arc",
+      "weight": 0,
+      "rationale": "User override: not a dislike of power fantasy itself \u2014 some series like The Primal Hunter were just poorly executed. Treated as neutral; execution/other themes decide.",
+      "evidence": [
+        "The Primal Hunter",
+        "System Change",
+        "Voidknight Ascension"
+      ]
+    },
+    {
+      "tag": "kingdom_building",
+      "description": "Significant focus on constructing and managing a settlement, city, or kingdom as a core loop",
+      "weight": -1,
+      "rationale": "User override: mild dislike of kingdom/settlement-management as a core loop.",
+      "evidence": [
+        "Tree of Aeons",
+        "Mayor of Stonebridge",
+        "Dragon's Mist"
+      ]
+    },
+    {
+      "tag": "isekai_portal_fantasy",
+      "description": "Protagonist is transported from the real world into a fantasy realm",
+      "weight": 0,
+      "rationale": "Appears with equal frequency in liked and disliked books; it is a neutral genre frame rather than a preference signal\u2014execution and other tags dominate",
+      "evidence": [
+        "Mark of the Fool",
+        "He Who Fights with Monsters",
+        "The Grand Game",
+        "Divine Invasion"
+      ]
+    }
+  ]
+}

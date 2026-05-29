@@ -167,3 +167,9 @@ cython_debug/
 .vscode
 
 backups
+
+# Theme-scan generated caches (regenerable, large) and local review state
+descriptions_cache.json
+classifications.json
+*.annotations.json
+.claude/
