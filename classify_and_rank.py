@@ -186,10 +186,26 @@ HTML_HEAD = """<!doctype html>
             color: #fff; padding: 8px 16px; border-radius: 8px; opacity: 0; transition: opacity .2s;
             pointer-events: none; font-size: .9rem; }}
   #toast.show {{ opacity: .95; }}
+  .controls {{ display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 1rem; }}
+  .controls input, .controls select {{ font: inherit; padding: 6px 10px; border-radius: 8px;
+       border: 1px solid var(--line); background: var(--card); color: var(--ink); }}
+  .controls input[type=search] {{ min-width: 240px; }}
+  .controls label {{ font-size: .85rem; color: var(--muted); display: flex; align-items: center; gap: 5px; }}
+  #count {{ margin-left: auto; color: var(--muted); font-size: .85rem; }}
 </style></head><body>
 <header>
   <h1>Recommendations by preference fit</h1>
-  <div class="meta">Generated {generated} &middot; {total} books ranked &middot; score = sum of your theme weights &middot; click a header to sort</div>
+  <div class="meta">Generated {generated} &middot; {total} books ranked &middot; score = theme fit + start-of-series rating &middot; click a header to sort</div>
+  <div class="controls">
+    <input type="search" id="f-text" placeholder="Search title / series…" autocomplete="off">
+    <label>Min score <input type="number" id="f-score" step="1" style="width:5em">
+    </label>
+    <label>Min year <input type="number" id="f-year" step="1" placeholder="any" style="width:6em">
+    </label>
+    <label><input type="checkbox" id="f-hidef"> Hide predicted F</label>
+    <label><select id="f-tier"><option value="">Any tier</option><option>S</option><option>A</option><option>B</option><option>F</option></select></label>
+    <span id="count"></span>
+  </div>
 </header>
 <div class="wrap"><table id="t"><thead><tr>
 <th data-type="num">#</th><th data-type="num">Score</th><th>Pred</th><th>Title / Series</th><th data-type="num">Ratings</th><th data-type="num">Pages</th><th data-type="num">Published</th><th>Why</th>{rate_col}
@@ -199,9 +215,22 @@ HTML_HEAD = """<!doctype html>
 HTML_TAIL = """</tbody></table></div>
 <script>
 const t = document.getElementById('t');
+const allRows = () => [...t.tBodies[0].rows];
+
+// Renumber the rank cells over currently-visible rows.
+function renumber() {
+  let n = 0;
+  allRows().forEach(r => { if (r.style.display !== 'none') r.cells[0].textContent = ++n; });
+  const total = allRows().length, shown = n;
+  const c = document.getElementById('count');
+  if (c) c.textContent = shown === total ? `${total} shown` : `${shown} of ${total} shown`;
+}
+
+// Click-to-sort columns.
 t.querySelectorAll('th').forEach((th, i) => th.addEventListener('click', () => {
+  if (!th.dataset.type && th.textContent === 'Rate') return;
   const num = th.dataset.type === 'num';
-  const rows = [...t.tBodies[0].rows];
+  const rows = allRows();
   const dir = th._asc = !th._asc;
   rows.sort((a, b) => {
     let x = a.cells[i].dataset.sort ?? a.cells[i].innerText;
@@ -210,11 +239,39 @@ t.querySelectorAll('th').forEach((th, i) => th.addEventListener('click', () => {
     return (x > y ? 1 : x < y ? -1 : 0) * (dir ? 1 : -1);
   });
   rows.forEach(r => t.tBodies[0].appendChild(r));
+  renumber();
 }));
+
+// Filtering.
+const F = {
+  text: document.getElementById('f-text'), score: document.getElementById('f-score'),
+  year: document.getElementById('f-year'), hidef: document.getElementById('f-hidef'),
+  tier: document.getElementById('f-tier'),
+};
+function applyFilters() {
+  const q = (F.text.value || '').trim().toLowerCase();
+  const minScore = F.score.value === '' ? -Infinity : parseFloat(F.score.value);
+  const minYear = F.year.value === '' ? null : parseInt(F.year.value);
+  const tierWant = F.tier.value;
+  allRows().forEach(r => {
+    const d = r.dataset;
+    let ok = true;
+    if (q && !d.text.includes(q) && !r.querySelector('.why').textContent.toLowerCase().includes(q)) ok = false;
+    if (ok && parseFloat(d.score) < minScore) ok = false;
+    if (ok && F.hidef.checked && d.tier === 'F') ok = false;
+    if (ok && tierWant && d.tier !== tierWant) ok = false;
+    if (ok && minYear !== null && (!d.year || parseInt(d.year) < minYear)) ok = false;
+    r.style.display = ok ? '' : 'none';
+  });
+  renumber();
+}
+Object.values(F).forEach(el => el && el.addEventListener('input', applyFilters));
+renumber();
 </script></body></html>"""
 
 
-RATE_ACTIONS = [("S", "S"), ("A", "A"), ("B", "B"), ("F", "F"), ("skip", "Not interested")]
+RATE_ACTIONS = [("S", "S"), ("A", "A"), ("B", "B"), ("F", "F"),
+                ("interested", "★ Save"), ("skip", "Not interested")]
 
 
 def render_row(row, i, with_buttons=False):
@@ -256,7 +313,9 @@ def render_row(row, i, with_buttons=False):
         buttons = f'<td class="rate-cell">{btns}</td>'
 
     return (
-        f'<tr data-id="{b.id}" data-series="{html.escape(b.series or "")}">'
+        f'<tr data-id="{b.id}" data-series="{html.escape(b.series or "")}"'
+        f' data-score="{row["score"]}" data-tier="{tier}" data-year="{pub_year or ""}"'
+        f' data-text="{html.escape((b.series or b.title).lower())}">'
         f'<td class="num rank">{i}</td>'
         f'<td class="num" data-sort="{score}"><span class="fit {score_cls}">{score:+g}</span>'
         f'<div class="score-sub" title="{breakdown}">{breakdown}</div></td>'

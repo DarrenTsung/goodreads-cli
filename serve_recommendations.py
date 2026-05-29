@@ -14,6 +14,7 @@ list always reflects what you've rated.
 import argparse
 import json
 import logging
+import sqlite3
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -22,45 +23,59 @@ import theme_scan_lib as lib
 from book import Book
 from book_rating import BookRating, Tier
 
+RATINGS_DB = "book_ratings.db"
+
 PROFILE_JSON = "theme_profile.json"
 CLASSIFICATIONS_JSON = "classifications.json"
 
 RATE_JS = """
 <div id="toast"></div>
 <script>
-function toast(msg) {
+let toastTimer;
+function toast(msg, undoId) {
   const el = document.getElementById('toast');
-  el.textContent = msg; el.classList.add('show');
-  clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 1800);
-}
-function renumber() {
-  document.querySelectorAll('#t tbody tr').forEach((tr, i) => tr.cells[0].textContent = i + 1);
+  el.innerHTML = '';
+  el.append(document.createTextNode(msg));
+  if (undoId != null) {
+    const a = document.createElement('a');
+    a.textContent = 'Undo'; a.href = '#';
+    a.style.cssText = 'color:#7bb1ff;margin-left:12px;font-weight:700;pointer-events:auto;text-decoration:underline';
+    a.onclick = async (ev) => { ev.preventDefault();
+      await fetch('/unrate', {method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({id: undoId})});
+      location.reload();
+    };
+    el.append(a);
+  }
+  el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 5000);
 }
 document.getElementById('t').addEventListener('click', async (e) => {
   const btn = e.target.closest('button.rate');
   if (!btn) return;
   const tr = btn.closest('tr');
-  const id = tr.dataset.id, series = tr.dataset.series, act = btn.dataset.act;
-  btn.closest('.rate-cell').querySelectorAll('button').forEach(b => b.disabled = true);
+  const id = parseInt(tr.dataset.id), series = tr.dataset.series, act = btn.dataset.act;
+  const cell = btn.closest('.rate-cell');
+  cell.querySelectorAll('button').forEach(b => b.disabled = true);
   try {
     const res = await fetch('/rate', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({id: parseInt(id), action: act})
+      body: JSON.stringify({id, action: act})
     });
     const data = await res.json();
     if (!data.ok) { toast('Error: ' + (data.error || 'failed'));
-      btn.closest('.rate-cell').querySelectorAll('button').forEach(b => b.disabled = false); return; }
-    // Remove this book and every other row from the same series.
+      cell.querySelectorAll('button').forEach(b => b.disabled = false); return; }
     const victims = series
       ? [...document.querySelectorAll('#t tbody tr')].filter(r => r.dataset.series === series)
       : [tr];
     victims.forEach(r => r.classList.add('removing'));
     setTimeout(() => { victims.forEach(r => r.remove()); renumber(); }, 250);
-    const label = act === 'skip' ? 'not interested' : act + '-tier';
-    toast(`Rated "${data.title}" ${label}` + (victims.length > 1 ? ` (removed ${victims.length} from series)` : ''));
+    const label = {skip:'not interested', interested:'saved (interested)'}[act] || act + '-tier';
+    const extra = victims.length > 1 ? ` (+${victims.length - 1} from series)` : '';
+    toast(`"${data.title}" \\u2192 ${label}${extra}`, data.id);
   } catch (err) {
     toast('Error: ' + err);
-    btn.closest('.rate-cell').querySelectorAll('button').forEach(b => b.disabled = false);
+    cell.querySelectorAll('button').forEach(b => b.disabled = false);
   }
 });
 </script>
@@ -87,13 +102,16 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, page)
 
     def do_POST(self):
-        if self.path != "/rate":
+        if self.path not in ("/rate", "/unrate"):
             self._send(404, "not found")
             return
         length = int(self.headers.get("Content-Length", 0))
         try:
             payload = json.loads(self.rfile.read(length) or "{}")
-            result = self.server.record_rating(int(payload["id"]), payload["action"])
+            if self.path == "/rate":
+                result = self.server.record_rating(int(payload["id"]), payload["action"])
+            else:
+                result = self.server.unrate(int(payload["id"]))
             self._send(200, json.dumps(result), "application/json")
         except Exception as e:
             self._send(200, json.dumps({"ok": False, "error": str(e)}), "application/json")
@@ -121,21 +139,39 @@ class RecServer(ThreadingHTTPServer):
         out.append(cr.HTML_TAIL.replace("</body></html>", RATE_JS + "</body></html>"))
         return "\n".join(out)
 
-    def record_rating(self, book_id, action):
-        book = getattr(self, "books_by_id", {}).get(book_id) or \
+    def _book(self, book_id):
+        return getattr(self, "books_by_id", {}).get(book_id) or \
             {b.id: b for b in Book.load_books_from_db()}.get(book_id)
+
+    def record_rating(self, book_id, action):
+        book = self._book(book_id)
         if not book:
             return {"ok": False, "error": f"unknown book id {book_id}"}
         ratings = BookRating.load_ratings_from_db()
+        disp = book.series or book.title
         if ratings.has_directly_rated_book(book):
-            return {"ok": True, "title": book.series or book.title}  # already rated; just drop it
+            return {"ok": True, "title": disp, "id": book_id}  # already rated; just drop it
         if action == "skip":
             ratings.mark_book_as_uninterested(book)
+        elif action == "interested":
+            ratings.mark_book_as_interested(book)
         elif action in ("S", "A", "B", "F"):
             ratings.mark_book_with_tier(book, Tier(action))
         else:
             return {"ok": False, "error": f"bad action {action}"}
         logging.info(f"Rated '{book.title}' ({book.series}) -> {action}")
+        return {"ok": True, "title": disp, "id": book_id}
+
+    def unrate(self, book_id):
+        """Delete the rating row for this book (undo). The series reappears on reload."""
+        book = self._book(book_id)
+        if not book:
+            return {"ok": False, "error": f"unknown book id {book_id}"}
+        conn = sqlite3.connect(RATINGS_DB)
+        conn.execute("DELETE FROM book_ratings WHERE title = ?", (book.title,))
+        conn.commit()
+        conn.close()
+        logging.info(f"Un-rated '{book.title}'")
         return {"ok": True, "title": book.series or book.title}
 
 
