@@ -208,7 +208,7 @@ HTML_HEAD = """<!doctype html>
   </div>
 </header>
 <div class="wrap"><table id="t"><thead><tr>
-<th data-type="num">#</th><th data-type="num">Score</th><th>Pred</th><th>Title / Series</th><th data-type="num">Ratings</th><th data-type="num">Pages</th><th data-type="num">Published</th><th>Why</th>{rate_col}
+<th data-type="num">#</th><th data-type="num">Score</th><th>Pred</th><th>Title / Series</th><th data-type="num">Ratings</th><th data-type="num">Pages</th><th>Why</th>{rate_col}
 </tr></thead><tbody>
 """
 
@@ -300,9 +300,7 @@ def render_row(row, i, with_buttons=False):
         chips.append(f'<span class="{cls}" title="{tip}">{avg:.2f}</span>')
     chips_html = f'<div class="schips">{"".join(chips)}</div>' if chips else "—"
 
-    pub_year = row.get("published_year")
-    pub_sort = row.get("published_date") or (f"{pub_year}-01-01" if pub_year else "0000-00-00")
-    pub_disp = str(pub_year) if pub_year else "&mdash;"
+    pub_year = row.get("published_year")  # captured for future use; column hidden while sparse
 
     breakdown = f'themes {row["fit_score"]:+d}, start-rating {row["rating_term"]:+.1f}'
     buttons = ""
@@ -324,7 +322,6 @@ def render_row(row, i, with_buttons=False):
         f'<td class="num" data-sort="{row["start_rating"]}">{chips_html}'
         f'<div class="sub">{row["num_ratings"]:,} ratings total</div></td>'
         f'<td class="num" data-sort="{row["pages"]}">{row["pages"]:,}</td>'
-        f'<td class="num" data-sort="{pub_sort}">{pub_disp}</td>'
         f'<td class="why">{html.escape(row["reasoning"])}</td>'
         f'{buttons}'
         f'</tr>'
