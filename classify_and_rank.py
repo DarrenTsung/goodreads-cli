@@ -129,15 +129,15 @@ HTML_HEAD = """<!doctype html>
     :root {{ --bg:#0d1117; --card:#161b22; --ink:#e6edf3; --muted:#8b949e; --line:#272c33; --hover:#1b2330; }}
   }}
   * {{ box-sizing: border-box; }}
-  body {{ font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-          margin: 0; padding: 2.5rem clamp(1rem, 4vw, 3rem); background: var(--bg); color: var(--ink); }}
-  header {{ max-width: 1200px; margin: 0 auto 1.5rem; }}
-  h1 {{ margin: 0 0 .3rem; font-size: 1.7rem; letter-spacing: -.02em; }}
-  .meta {{ color: var(--muted); font-size: .9rem; }}
-  .wrap {{ max-width: 1200px; margin: 0 auto; background: var(--card); border: 1px solid var(--line);
-           border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px #0000000d, 0 8px 24px #0000000a; }}
+  body {{ font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+          margin: 0; padding: 1.5rem clamp(.6rem, 2vw, 1.5rem); background: var(--bg); color: var(--ink); }}
+  header {{ max-width: 1400px; margin: 0 auto 1rem; }}
+  h1 {{ margin: 0 0 .3rem; font-size: 1.5rem; letter-spacing: -.02em; }}
+  .meta {{ color: var(--muted); font-size: .85rem; }}
+  .wrap {{ max-width: 1400px; margin: 0 auto; background: var(--card); border: 1px solid var(--line);
+           border-radius: 14px; overflow-x: auto; box-shadow: 0 1px 3px #0000000d, 0 8px 24px #0000000a; }}
   table {{ border-collapse: collapse; width: 100%; }}
-  th, td {{ padding: 12px 16px; text-align: left; vertical-align: top; }}
+  th, td {{ padding: 7px 9px; text-align: left; vertical-align: top; }}
   thead th {{ position: sticky; top: 0; z-index: 1; background: var(--card); cursor: pointer;
               user-select: none; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em;
               color: var(--muted); border-bottom: 1px solid var(--line); white-space: nowrap; }}
@@ -163,7 +163,7 @@ HTML_HEAD = """<!doctype html>
   .title a:hover {{ color: var(--accent); text-decoration: underline; }}
   .sub {{ color: var(--muted); font-size: .8rem; margin-top: 2px; }}
   .rating-stars {{ color: #e3a008; }}
-  .why {{ color: var(--muted); max-width: 32rem; font-size: .88rem; }}
+  .why {{ color: var(--muted); width: 24rem; min-width: 16rem; font-size: .85rem; }}
   .schips {{ display: flex; flex-wrap: wrap; gap: 3px; }}
   .rchip {{ font-size: .72rem; font-variant-numeric: tabular-nums; border-radius: 4px;
             padding: 1px 5px; background: #8882; color: var(--ink); }}
@@ -171,11 +171,11 @@ HTML_HEAD = """<!doctype html>
   .rchip.hi {{ background: #1a7f3722; color: #1a7f37; }}
   .rchip.lo {{ background: #c0392b22; color: #c0392b; }}
   @media (prefers-color-scheme: dark) {{ .rchip.hi {{ color:#3fb950; }} .rchip.lo {{ color:#f85149; }} }}
-  .score-sub {{ font-size: .72rem; color: var(--muted); margin-top: 2px; white-space: nowrap; }}
-  .rate-cell {{ white-space: nowrap; }}
-  button.rate {{ font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer; margin: 1px;
+  .score-sub {{ font-size: .68rem; color: var(--muted); margin-top: 2px; }}
+  .rate-cell {{ display: flex; flex-wrap: wrap; gap: 3px; max-width: 132px; }}
+  button.rate {{ font: inherit; font-size: .72rem; font-weight: 700; cursor: pointer;
                  border: 1px solid var(--line); background: var(--card); color: var(--ink);
-                 border-radius: 6px; padding: 3px 8px; }}
+                 border-radius: 6px; padding: 2px 7px; }}
   button.rate:hover {{ border-color: var(--accent); color: var(--accent); }}
   button.rate[data-act="S"]:hover {{ background:#8957e5; color:#fff; border-color:#8957e5; }}
   button.rate[data-act="A"]:hover {{ background:#1a7f37; color:#fff; border-color:#1a7f37; }}
@@ -302,7 +302,7 @@ def render_row(row, i, with_buttons=False):
 
     pub_year = row.get("published_year")  # captured for future use; column hidden while sparse
 
-    breakdown = f'themes {row["fit_score"]:+d}, start-rating {row["rating_term"]:+.1f}'
+    breakdown = f'fit {row["fit_score"]:+d} &middot; &#9733;{row["rating_term"]:+.1f}'
     buttons = ""
     if with_buttons:
         btns = "".join(
