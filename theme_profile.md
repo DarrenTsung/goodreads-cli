@@ -4,7 +4,7 @@ _Generated 2026-05-29T00:22:01.258355+00:00 from 30 liked, 38 F-tier, and 150 sa
 
 ## Taste summary
 
-This reader is drawn to progression fantasy with creative, crunchy mechanics—especially card- or tier-based systems—and to underdogs who find clever, unconventional paths rather than simply grinding harder. They value genuine literary and philosophical depth, serious tone, and subverted tropes (particularly the chosen-one archetype). They consistently reject dungeon cores, harem content, cultivation/xianxia aesthetics, VR settings, and comedic parody, and show strong fatigue with second-chance/reincarnation plots and generic power-fantasy alpha-male protagonists.
+This reader is drawn to progression fantasy with creative, crunchy mechanics—especially card- or tier-based systems—and to underdogs who find clever, unconventional paths rather than simply grinding harder. They value genuine literary and philosophical depth, serious tone, and subverted tropes (particularly the chosen-one archetype), and they enjoy second-chance / reincarnation 'redo' premises. They consistently reject dungeon cores, harem content, cultivation/xianxia aesthetics, VR / trapped-in-game settings, comedic parody, and settlement/kingdom-management loops. Generic power fantasy is fine when well executed.
 
 ## How to verify
 
