@@ -363,6 +363,10 @@ def process_new_books(new_books, books_by_id, books_by_title):
         except ValueError:
             logging.info(f"Ignoring book not found on goodreads: {book.title} ({book.author}).")
             continue
+        except Exception as e:
+            # Don't let one book's transient failure (network drop, parse error) abort a long scan.
+            logging.error(f"Failed to process book {book.title} ({book.author}): {e}; skipping.")
+            continue
 
         book_in_db = find_book(books_by_id, books_by_title, book)
         if book_in_db:
@@ -379,7 +383,11 @@ def process_new_books(new_books, books_by_id, books_by_title):
                 continue
 
             logging.info(f"Refreshing series: {book.series}..")
-            found_books_from_series = book.find_books_from_series()
+            try:
+                found_books_from_series = book.find_books_from_series()
+            except Exception as e:
+                logging.error(f"Failed to refresh series {book.series}: {e}; skipping series.")
+                continue
             for book in found_books_from_series:
                 if find_book(books_by_id, books_by_title, book):
                     continue

@@ -285,7 +285,17 @@ def requests_get_with_retry(url, max_retries=10, backoff_factor=0.5, headers=Non
     retries = 0
     waf_solve_attempts = 0
     while True:
-        response = session.get(url, allow_redirects=True, headers=headers)
+        try:
+            response = session.get(url, allow_redirects=True, headers=headers, timeout=30)
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            # Goodreads intermittently resets/drops connections (e.g. when rate-limiting). Treat a
+            # dropped connection like a 5xx and retry with backoff instead of crashing the whole run.
+            if retries >= max_retries:
+                raise
+            retries += 1
+            logging.warning(f"Network error fetching {url} ({e}); retry {retries}/{max_retries}..")
+            time.sleep(backoff_factor * (2 ** (retries - 1)))
+            continue
         if _is_waf_challenge(response):
             if waf_solve_attempts >= 2:
                 raise RuntimeError(f"Unable to clear Goodreads WAF challenge for {url}")
