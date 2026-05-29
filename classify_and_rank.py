@@ -28,6 +28,11 @@ DESC_CHARS = 700
 BATCH_SIZE = 10
 TIER_RANK = {"S": 4, "A": 3, "B": 2, "F": 0}
 
+# How strongly the Goodreads start-of-series rating factors into the score.
+# rating_term = RATING_WEIGHT * (start_rating - RATING_BASELINE); added to theme fit.
+RATING_WEIGHT = 4.0
+RATING_BASELINE = 4.0
+
 CLASSIFY_TEMPLATE = """You classify LitRPG / progression-fantasy books for one specific reader.
 
 This reader's taste: {summary}
@@ -158,14 +163,36 @@ HTML_HEAD = """<!doctype html>
   .title a:hover {{ color: var(--accent); text-decoration: underline; }}
   .sub {{ color: var(--muted); font-size: .8rem; margin-top: 2px; }}
   .rating-stars {{ color: #e3a008; }}
-  .why {{ color: var(--muted); max-width: 34rem; font-size: .9rem; }}
+  .why {{ color: var(--muted); max-width: 32rem; font-size: .88rem; }}
+  .schips {{ display: flex; flex-wrap: wrap; gap: 3px; }}
+  .rchip {{ font-size: .72rem; font-variant-numeric: tabular-nums; border-radius: 4px;
+            padding: 1px 5px; background: #8882; color: var(--ink); }}
+  .rchip.start {{ outline: 1.5px solid var(--accent); font-weight: 700; }}
+  .rchip.hi {{ background: #1a7f3722; color: #1a7f37; }}
+  .rchip.lo {{ background: #c0392b22; color: #c0392b; }}
+  @media (prefers-color-scheme: dark) {{ .rchip.hi {{ color:#3fb950; }} .rchip.lo {{ color:#f85149; }} }}
+  .score-sub {{ font-size: .72rem; color: var(--muted); margin-top: 2px; white-space: nowrap; }}
+  .rate-cell {{ white-space: nowrap; }}
+  button.rate {{ font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer; margin: 1px;
+                 border: 1px solid var(--line); background: var(--card); color: var(--ink);
+                 border-radius: 6px; padding: 3px 8px; }}
+  button.rate:hover {{ border-color: var(--accent); color: var(--accent); }}
+  button.rate[data-act="S"]:hover {{ background:#8957e5; color:#fff; border-color:#8957e5; }}
+  button.rate[data-act="A"]:hover {{ background:#1a7f37; color:#fff; border-color:#1a7f37; }}
+  button.rate[data-act="B"]:hover {{ background:#bf8700; color:#fff; border-color:#bf8700; }}
+  button.rate[data-act="F"]:hover {{ background:#c0392b; color:#fff; border-color:#c0392b; }}
+  tr.removing {{ transition: opacity .25s, background .25s; opacity: 0; background: #1a7f3722; }}
+  #toast {{ position: fixed; bottom: 1.2rem; left: 50%; transform: translateX(-50%); background: #1f2328;
+            color: #fff; padding: 8px 16px; border-radius: 8px; opacity: 0; transition: opacity .2s;
+            pointer-events: none; font-size: .9rem; }}
+  #toast.show {{ opacity: .95; }}
 </style></head><body>
 <header>
   <h1>Recommendations by preference fit</h1>
   <div class="meta">Generated {generated} &middot; {total} books ranked &middot; score = sum of your theme weights &middot; click a header to sort</div>
 </header>
 <div class="wrap"><table id="t"><thead><tr>
-<th data-type="num">#</th><th data-type="num">Fit</th><th>Pred</th><th>Title / Series</th><th data-type="num">Rating</th><th data-type="num">Pages</th><th data-type="num">Published</th><th>Why</th>
+<th data-type="num">#</th><th data-type="num">Score</th><th>Pred</th><th>Title / Series</th><th data-type="num">Ratings</th><th data-type="num">Pages</th><th data-type="num">Published</th><th>Why</th>{rate_col}
 </tr></thead><tbody>
 """
 
@@ -187,46 +214,69 @@ t.querySelectorAll('th').forEach((th, i) => th.addEventListener('click', () => {
 </script></body></html>"""
 
 
-def write_html(profile, rows, total_classified):
-    weights = profile["weights"]
-    out = [HTML_HEAD.format(generated=datetime.now(timezone.utc).isoformat(), total=total_classified)]
-    for i, row in enumerate(rows, 1):
-        b = row["book"]
-        fit = row["fit_score"]
-        fit_cls = "fit-pos" if fit > 0 else "fit-neg" if fit < 0 else "fit-zero"
-        tier = row.get("predicted_tier") or "?"
+RATE_ACTIONS = [("S", "S"), ("A", "A"), ("B", "B"), ("F", "F"), ("skip", "Not interested")]
 
-        # Combined Title / Series cell: show the series name when it's a series,
-        # otherwise the standalone title. A series shows its volume count as a subline.
-        if b.series:
-            primary = html.escape(b.series)
-            n = row.get("series_count", 1)
-            sub = f'{n} book{"s" if n != 1 else ""} in series'
-        else:
-            primary = html.escape(b.title)
-            sub = "standalone"
-        if b.goodreads_link:
-            primary = f'<a href="{html.escape(b.goodreads_link)}" target="_blank" rel="noopener">{primary}</a>'
-        title_sort = html.escape(b.series or b.title)
 
-        stars = "&#9733;" * round(row["avg_rating"]) + "&#9734;" * (5 - round(row["avg_rating"]))
-        pub_year = row.get("published_year")
-        pub_sort = row.get("published_date") or (f"{pub_year}-01-01" if pub_year else "0000-00-00")
-        pub_disp = str(pub_year) if pub_year else "&mdash;"
-        out.append(
-            f'<tr>'
-            f'<td class="num rank">{i}</td>'
-            f'<td class="num" data-sort="{fit}"><span class="fit {fit_cls}">{fit:+d}</span></td>'
-            f'<td><span class="tier tier-{tier}">{tier}</span></td>'
-            f'<td><div class="title">{primary}</div><div class="sub">{sub}</div></td>'
-            f'<td class="num" data-sort="{row["avg_rating"]}">'
-            f'<span class="rating-stars">{stars}</span> <strong>{row["avg_rating"]:.2f}</strong>'
-            f'<div class="sub">{row["num_ratings"]:,} ratings</div></td>'
-            f'<td class="num" data-sort="{row["pages"]}">{row["pages"]:,}</td>'
-            f'<td class="num" data-sort="{pub_sort}">{pub_disp}</td>'
-            f'<td class="why">{html.escape(row["reasoning"])}</td>'
-            f'</tr>'
+def render_row(row, i, with_buttons=False):
+    """Render one <tr>. Set with_buttons=True to append a rating-actions cell (server)."""
+    b = row["book"]
+    score = row["score"]
+    score_cls = "fit-pos" if score > 0 else "fit-neg" if score < 0 else "fit-zero"
+    tier = row.get("predicted_tier") or "?"
+
+    if b.series:
+        primary = html.escape(b.series)
+        n = row.get("series_count", 1)
+        sub = f'{n} book{"s" if n != 1 else ""} in series'
+    else:
+        primary = html.escape(b.title)
+        sub = "standalone"
+    if b.goodreads_link:
+        primary = f'<a href="{html.escape(b.goodreads_link)}" target="_blank" rel="noopener">{primary}</a>'
+
+    # Per-book ratings across the series, in order; the first (start) is outlined.
+    chips = []
+    for idx, (snum, avg, cnt) in enumerate(row.get("series_ratings", [])):
+        cls = "rchip" + (" start" if idx == 0 else "")
+        cls += " hi" if avg >= 4.3 else " lo" if (avg and avg < 4.0) else ""
+        tip = f"Book {html.escape(str(snum))}: {avg:.2f} ({cnt:,})" if snum else f"{avg:.2f} ({cnt:,} ratings)"
+        chips.append(f'<span class="{cls}" title="{tip}">{avg:.2f}</span>')
+    chips_html = f'<div class="schips">{"".join(chips)}</div>' if chips else "—"
+
+    pub_year = row.get("published_year")
+    pub_sort = row.get("published_date") or (f"{pub_year}-01-01" if pub_year else "0000-00-00")
+    pub_disp = str(pub_year) if pub_year else "&mdash;"
+
+    breakdown = f'themes {row["fit_score"]:+d}, start-rating {row["rating_term"]:+.1f}'
+    buttons = ""
+    if with_buttons:
+        btns = "".join(
+            f'<button class="rate" data-act="{act}">{label}</button>' for act, label in RATE_ACTIONS
         )
+        buttons = f'<td class="rate-cell">{btns}</td>'
+
+    return (
+        f'<tr data-id="{b.id}" data-series="{html.escape(b.series or "")}">'
+        f'<td class="num rank">{i}</td>'
+        f'<td class="num" data-sort="{score}"><span class="fit {score_cls}">{score:+g}</span>'
+        f'<div class="score-sub" title="{breakdown}">{breakdown}</div></td>'
+        f'<td><span class="tier tier-{tier}">{tier}</span></td>'
+        f'<td><div class="title">{primary}</div><div class="sub">{sub}</div></td>'
+        f'<td class="num" data-sort="{row["start_rating"]}">{chips_html}'
+        f'<div class="sub">{row["num_ratings"]:,} ratings total</div></td>'
+        f'<td class="num" data-sort="{row["pages"]}">{row["pages"]:,}</td>'
+        f'<td class="num" data-sort="{pub_sort}">{pub_disp}</td>'
+        f'<td class="why">{html.escape(row["reasoning"])}</td>'
+        f'{buttons}'
+        f'</tr>'
+    )
+
+
+def write_html(profile, rows, total_classified):
+    out = [HTML_HEAD.format(generated=datetime.now(timezone.utc).isoformat(),
+                            total=total_classified, rate_col="")]
+    for i, row in enumerate(rows, 1):
+        out.append(render_row(row, i))
     out.append(HTML_TAIL)
     with open(RECOMMENDATIONS_HTML, "w") as f:
         f.write("\n".join(out))
@@ -267,7 +317,9 @@ def _now_excluded(book, ratings):
     return False
 
 
-def rank_and_write(profile, classifications, books_by_id, series_aware=False, fmt="html", ratings=None):
+def compute_rows(profile, classifications, books_by_id, ratings=None,
+                 series_aware=False, rating_weight=RATING_WEIGHT):
+    """Build the ranked rows. Score = theme fit + rating term (from the start rating)."""
     weights = profile["weights"]
     bbs = BooksBySeries.from_books(books_by_id.values())
     cache = lib.load_cache()
@@ -281,14 +333,30 @@ def rank_and_write(profile, classifications, books_by_id, series_aware=False, fm
         if book.series:
             pages = bbs.total_pages_reported_by_kindle_for_series(book.series)
             num_ratings = bbs.total_number_of_ratings_for_series(book.series)
+            series_books = bbs.books_by_series[book.series]
+            series_ratings = [
+                (sb.series_number, sb.average_rating or 0, sb.number_of_ratings or 0)
+                for sb in series_books
+            ]
+            # The "start" rating is the earliest volume's — the entry point the reader judges.
+            start_rating = series_books[0].average_rating or 0
         else:
             pages = book.pages_reported_by_kindle or 0
             num_ratings = book.number_of_ratings or 0
+            series_ratings = [(book.series_number, book.average_rating or 0, book.number_of_ratings or 0)]
+            start_rating = book.average_rating or 0
+
+        fit = fit_score(c["tags"], weights)
+        rating_term = round(rating_weight * (start_rating - RATING_BASELINE), 2)
         entry = cache.get(str(book.id), {})
         rows.append({
             "book": book,
             "tags": c["tags"],
-            "fit_score": fit_score(c["tags"], weights),
+            "fit_score": fit,
+            "rating_term": rating_term,
+            "score": round(fit + rating_term, 2),
+            "start_rating": start_rating,
+            "series_ratings": series_ratings,
             "predicted_tier": c.get("predicted_tier"),
             "reasoning": c.get("reasoning", ""),
             "series_count": 1,
@@ -299,15 +367,18 @@ def rank_and_write(profile, classifications, books_by_id, series_aware=False, fm
             "published_year": entry.get("published_year"),
         })
     rows.sort(
-        key=lambda r: (
-            r["fit_score"],
-            TIER_RANK.get(r["predicted_tier"], 1),
-            r["book"].average_rating or 0,
-        ),
+        key=lambda r: (r["score"], TIER_RANK.get(r["predicted_tier"], 1), r["start_rating"]),
         reverse=True,
     )
     if series_aware:
         rows = collapse_by_series(rows)
+    return rows
+
+
+def rank_and_write(profile, classifications, books_by_id, series_aware=False, fmt="html",
+                   ratings=None, rating_weight=RATING_WEIGHT):
+    rows = compute_rows(profile, classifications, books_by_id, ratings=ratings,
+                        series_aware=series_aware, rating_weight=rating_weight)
     if fmt == "md":
         write_md(profile, rows, len(rows))
     else:
@@ -325,6 +396,8 @@ def main():
     parser.add_argument("--rerank", action="store_true", help="recompute scores from edited weights; no claude calls")
     parser.add_argument("--series-aware", action="store_true", help="collapse each series to its single best-ranked book")
     parser.add_argument("--format", choices=["html", "md"], default="html", help="output format (default html)")
+    parser.add_argument("--rating-weight", type=float, default=RATING_WEIGHT,
+                        help=f"how strongly the start-of-series rating factors into score (default {RATING_WEIGHT})")
     args = parser.parse_args()
 
     out_file = RECOMMENDATIONS_MD if args.format == "md" else RECOMMENDATIONS_HTML
@@ -340,7 +413,8 @@ def main():
         with open(CLASSIFICATIONS_JSON) as f:
             classifications = json.load(f)
         rows = rank_and_write(profile, classifications, books_by_id,
-                              series_aware=args.series_aware, fmt=args.format, ratings=ratings)
+                              series_aware=args.series_aware, fmt=args.format, ratings=ratings,
+                              rating_weight=args.rating_weight)
         logging.info(f"Re-ranked {len(rows)} books from edited weights -> {out_file}")
         return
 
@@ -390,7 +464,8 @@ def main():
         json.dump(classifications, f, indent=2)
 
     rows = rank_and_write(profile, classifications, books_by_id,
-                          series_aware=args.series_aware, fmt=args.format, ratings=ratings)
+                          series_aware=args.series_aware, fmt=args.format, ratings=ratings,
+                          rating_weight=args.rating_weight)
     logging.info(f"Classified {len(classifications)} books. Wrote {out_file} ({len(rows)} ranked).")
 
 
