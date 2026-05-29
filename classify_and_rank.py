@@ -142,7 +142,7 @@ HTML_HEAD = """<!doctype html>
 <h1>Recommendations by preference fit</h1>
 <div class="meta">Generated {generated} from {total} classified candidates. Score = sum of your theme weights for each matched theme. Click a header to sort.</div>
 <table id="t"><thead><tr>
-<th data-type="num">#</th><th data-type="num">Fit</th><th>Pred</th><th>Title</th><th>Series</th><th>Themes</th><th>Why</th>
+<th data-type="num">#</th><th data-type="num">Fit</th><th>Pred</th><th>Title</th><th>Series</th><th data-type="num">Rating</th><th data-type="num">Pages</th><th>Themes</th><th>Why</th>
 </tr></thead><tbody>
 """
 
@@ -180,13 +180,19 @@ def write_html(profile, rows, total_classified):
         series = html.escape(b.series or "")
         if row.get("series_count", 1) > 1:
             series += f' <span class="series">(+{row["series_count"] - 1} more)</span>'
+        title = html.escape(b.title)
+        if b.goodreads_link:
+            title = f'<a href="{html.escape(b.goodreads_link)}" target="_blank" rel="noopener">{title}</a>'
         out.append(
             f'<tr>'
             f'<td class="num">{i}</td>'
             f'<td class="num {fit_cls}" data-sort="{fit}">{fit:+d}</td>'
             f'<td><span class="tier tier-{tier}">{tier}</span></td>'
-            f'<td class="title">{html.escape(b.title)}</td>'
+            f'<td class="title" data-sort="{html.escape(b.title)}">{title}</td>'
             f'<td class="series">{series}</td>'
+            f'<td class="num" data-sort="{row["avg_rating"]}">{row["avg_rating"]:.2f} '
+            f'<span class="series">({row["num_ratings"]:,})</span></td>'
+            f'<td class="num" data-sort="{row["pages"]}">{row["pages"]:,}</td>'
             f'<td class="themes">{theme_html}</td>'
             f'<td class="why">{html.escape(row["reasoning"])}</td>'
             f'</tr>'
@@ -233,6 +239,7 @@ def _now_excluded(book, ratings):
 
 def rank_and_write(profile, classifications, books_by_id, series_aware=False, fmt="html", ratings=None):
     weights = profile["weights"]
+    bbs = BooksBySeries.from_books(books_by_id.values())
     rows = []
     for bid, c in classifications.items():
         book = books_by_id.get(int(bid))
@@ -240,6 +247,12 @@ def rank_and_write(profile, classifications, books_by_id, series_aware=False, fm
             continue
         if _now_excluded(book, ratings):
             continue
+        if book.series:
+            pages = bbs.total_pages_reported_by_kindle_for_series(book.series)
+            num_ratings = bbs.total_number_of_ratings_for_series(book.series)
+        else:
+            pages = book.pages_reported_by_kindle or 0
+            num_ratings = book.number_of_ratings or 0
         rows.append({
             "book": book,
             "tags": c["tags"],
@@ -247,6 +260,9 @@ def rank_and_write(profile, classifications, books_by_id, series_aware=False, fm
             "predicted_tier": c.get("predicted_tier"),
             "reasoning": c.get("reasoning", ""),
             "series_count": 1,
+            "avg_rating": book.average_rating or 0,
+            "num_ratings": num_ratings,
+            "pages": pages,
         })
     rows.sort(
         key=lambda r: (
