@@ -9,6 +9,7 @@ Reads theme_profile.json (run build_profile.py first) and descriptions_cache.jso
 Writes classifications.json (cache of claude output) and recommendations.md.
 """
 import argparse
+import html
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -21,6 +22,7 @@ from book_rating import BookRating
 PROFILE_JSON = "theme_profile.json"
 CLASSIFICATIONS_JSON = "classifications.json"
 RECOMMENDATIONS_MD = "recommendations.md"
+RECOMMENDATIONS_HTML = "recommendations.html"
 
 DESC_CHARS = 700
 BATCH_SIZE = 10
@@ -109,6 +111,91 @@ def write_md(profile, rows, total_classified):
         f.write("\n".join(lines))
 
 
+HTML_HEAD = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Recommendations by preference fit</title>
+<style>
+  :root {{ color-scheme: light dark; }}
+  body {{ font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 2rem; }}
+  h1 {{ margin-bottom: .2rem; }}
+  .meta {{ color: #888; margin-bottom: 1.2rem; }}
+  table {{ border-collapse: collapse; width: 100%; }}
+  th, td {{ padding: 8px 10px; border-bottom: 1px solid #8884; vertical-align: top; text-align: left; }}
+  th {{ position: sticky; top: 0; background: Canvas; cursor: pointer; user-select: none; border-bottom: 2px solid #8888; }}
+  th:hover {{ color: #4a90d9; }}
+  td.num {{ text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }}
+  .fit-pos {{ color: #1a7f37; font-weight: 600; }}
+  .fit-neg {{ color: #c0392b; font-weight: 600; }}
+  .fit-zero {{ color: #888; }}
+  .tier {{ font-weight: 700; border-radius: 4px; padding: 1px 7px; }}
+  .tier-S {{ background: #6f42c1; color: #fff; }}
+  .tier-A {{ background: #1a7f37; color: #fff; }}
+  .tier-B {{ background: #b08800; color: #fff; }}
+  .tier-F {{ background: #c0392b; color: #fff; }}
+  .title {{ font-weight: 600; }}
+  .series {{ color: #888; font-size: 13px; }}
+  .themes {{ font-size: 12px; color: #666; }}
+  .themes .pos {{ color: #1a7f37; }} .themes .neg {{ color: #c0392b; }}
+  .why {{ color: #444; max-width: 40rem; }}
+  tr:hover td {{ background: #4a90d915; }}
+</style></head><body>
+<h1>Recommendations by preference fit</h1>
+<div class="meta">Generated {generated} from {total} classified candidates. Score = sum of your theme weights for each matched theme. Click a header to sort.</div>
+<table id="t"><thead><tr>
+<th data-type="num">#</th><th data-type="num">Fit</th><th>Pred</th><th>Title</th><th>Series</th><th>Themes</th><th>Why</th>
+</tr></thead><tbody>
+"""
+
+HTML_TAIL = """</tbody></table>
+<script>
+const t = document.getElementById('t');
+t.querySelectorAll('th').forEach((th, i) => th.addEventListener('click', () => {
+  const num = th.dataset.type === 'num';
+  const rows = [...t.tBodies[0].rows];
+  const dir = th._asc = !th._asc;
+  rows.sort((a, b) => {
+    let x = a.cells[i].dataset.sort ?? a.cells[i].innerText;
+    let y = b.cells[i].dataset.sort ?? b.cells[i].innerText;
+    if (num) { x = parseFloat(x); y = parseFloat(y); }
+    return (x > y ? 1 : x < y ? -1 : 0) * (dir ? 1 : -1);
+  });
+  rows.forEach(r => t.tBodies[0].appendChild(r));
+}));
+</script></body></html>"""
+
+
+def write_html(profile, rows, total_classified):
+    weights = profile["weights"]
+    out = [HTML_HEAD.format(generated=datetime.now(timezone.utc).isoformat(), total=total_classified)]
+    for i, row in enumerate(rows, 1):
+        b = row["book"]
+        fit = row["fit_score"]
+        fit_cls = "fit-pos" if fit > 0 else "fit-neg" if fit < 0 else "fit-zero"
+        tier = row.get("predicted_tier") or "?"
+        theme_html = ", ".join(
+            f'<span class="{"pos" if weights.get(t,0)>0 else "neg" if weights.get(t,0)<0 else ""}">'
+            f'{html.escape(t)}{weights.get(t,0):+d}</span>'
+            for t in row["tags"]
+        )
+        series = html.escape(b.series or "")
+        if row.get("series_count", 1) > 1:
+            series += f' <span class="series">(+{row["series_count"] - 1} more)</span>'
+        out.append(
+            f'<tr>'
+            f'<td class="num">{i}</td>'
+            f'<td class="num {fit_cls}" data-sort="{fit}">{fit:+d}</td>'
+            f'<td><span class="tier tier-{tier}">{tier}</span></td>'
+            f'<td class="title">{html.escape(b.title)}</td>'
+            f'<td class="series">{series}</td>'
+            f'<td class="themes">{theme_html}</td>'
+            f'<td class="why">{html.escape(row["reasoning"])}</td>'
+            f'</tr>'
+        )
+    out.append(HTML_TAIL)
+    with open(RECOMMENDATIONS_HTML, "w") as f:
+        f.write("\n".join(out))
+
+
 def collapse_by_series(rows):
     """Keep one row per series (the highest-ranked, since rows are pre-sorted best-first).
 
@@ -131,12 +218,27 @@ def collapse_by_series(rows):
     return collapsed
 
 
-def rank_and_write(profile, classifications, books_by_id, series_aware=False):
+def _now_excluded(book, ratings):
+    """True if the book has since been rated, or its series rated/F-tier/uninterested."""
+    if ratings is None:
+        return False
+    if ratings.has_directly_rated_book(book):
+        return True
+    if ratings.has_rated_book_or_series_as_f_tier_or_uninterested(book):
+        return True
+    if book.series and ratings.has_rated_series(book.series):
+        return True
+    return False
+
+
+def rank_and_write(profile, classifications, books_by_id, series_aware=False, fmt="html", ratings=None):
     weights = profile["weights"]
     rows = []
     for bid, c in classifications.items():
         book = books_by_id.get(int(bid))
         if not book:
+            continue
+        if _now_excluded(book, ratings):
             continue
         rows.append({
             "book": book,
@@ -156,7 +258,10 @@ def rank_and_write(profile, classifications, books_by_id, series_aware=False):
     )
     if series_aware:
         rows = collapse_by_series(rows)
-    write_md(profile, rows, len(rows))
+    if fmt == "md":
+        write_md(profile, rows, len(rows))
+    else:
+        write_html(profile, rows, len(rows))
     return rows
 
 
@@ -169,22 +274,26 @@ def main():
     parser.add_argument("--min-pages", type=int, default=500, help="min pages (book or series) filter")
     parser.add_argument("--rerank", action="store_true", help="recompute scores from edited weights; no claude calls")
     parser.add_argument("--series-aware", action="store_true", help="collapse each series to its single best-ranked book")
+    parser.add_argument("--format", choices=["html", "md"], default="html", help="output format (default html)")
     args = parser.parse_args()
+
+    out_file = RECOMMENDATIONS_MD if args.format == "md" else RECOMMENDATIONS_HTML
 
     with open(PROFILE_JSON) as f:
         profile = json.load(f)
 
     books = Book.load_books_from_db()
     books_by_id = {b.id: b for b in books}
+    ratings = BookRating.load_ratings_from_db()
 
     if args.rerank:
         with open(CLASSIFICATIONS_JSON) as f:
             classifications = json.load(f)
-        rows = rank_and_write(profile, classifications, books_by_id, series_aware=args.series_aware)
-        logging.info(f"Re-ranked {len(rows)} books from edited weights -> {RECOMMENDATIONS_MD}")
+        rows = rank_and_write(profile, classifications, books_by_id,
+                              series_aware=args.series_aware, fmt=args.format, ratings=ratings)
+        logging.info(f"Re-ranked {len(rows)} books from edited weights -> {out_file}")
         return
 
-    ratings = BookRating.load_ratings_from_db()
     cache = lib.load_cache()
 
     recommendable = lib.recommendable_books(books, ratings, min_pages=args.min_pages)
@@ -230,8 +339,9 @@ def main():
     with open(CLASSIFICATIONS_JSON, "w") as f:
         json.dump(classifications, f, indent=2)
 
-    rows = rank_and_write(profile, classifications, books_by_id, series_aware=args.series_aware)
-    logging.info(f"Classified {len(classifications)} books. Wrote {RECOMMENDATIONS_MD} (top by fit).")
+    rows = rank_and_write(profile, classifications, books_by_id,
+                          series_aware=args.series_aware, fmt=args.format, ratings=ratings)
+    logging.info(f"Classified {len(classifications)} books. Wrote {out_file} ({len(rows)} ranked).")
 
 
 if __name__ == "__main__":
