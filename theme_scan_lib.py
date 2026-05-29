@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import random
+import re
 import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -72,6 +73,25 @@ def get_description(cache, book_id):
     return entry["description"] if entry else None
 
 
+def parse_pubdate(raw):
+    """Parse a Goodreads publicationInfo string into (iso_date, year).
+
+    Handles "First published April 5, 2021" / "Published 2019" / "Expected publication
+    October 1, 2024". Returns (YYYY-MM-DD or None, year int or None).
+    """
+    if not raw:
+        return None, None
+    m = re.search(r"([A-Z][a-z]+ \d{1,2}, \d{4})", raw)
+    if m:
+        try:
+            d = datetime.strptime(m.group(1), "%B %d, %Y")
+            return d.strftime("%Y-%m-%d"), d.year
+        except ValueError:
+            pass
+    y = re.search(r"\b(\d{4})\b", raw)
+    return None, (int(y.group(1)) if y else None)
+
+
 # ---------------------------------------------------------------------------
 # Parallel backfill
 # ---------------------------------------------------------------------------
@@ -119,18 +139,22 @@ def backfill_descriptions(books, workers=5, save_every=25):
 
 
 def _fetch_one(cache, book):
-    """Fetch and cache one description. Returns True on success."""
+    """Fetch and cache one description + publication date. Returns True on success."""
     try:
-        description = goodreads.description_text_for_book(book)
+        description, pub_raw = goodreads.description_and_pubdate_for_book(book)
     except Exception as e:
         logging.warning(f"  fetch failed for '{book.title}' ({book.id}): {e}")
         return False
     if not description or not description.strip():
         return False
+    pub_date, pub_year = parse_pubdate(pub_raw)
     with _cache_lock:
         cache[str(book.id)] = {
             "description": description.strip(),
             "goodreads_link": book.goodreads_link,
+            "published_raw": pub_raw,
+            "published_date": pub_date,
+            "published_year": pub_year,
             "fetched_at": datetime.now(timezone.utc).isoformat(),
         }
     return True

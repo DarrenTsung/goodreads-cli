@@ -165,7 +165,7 @@ HTML_HEAD = """<!doctype html>
   <div class="meta">Generated {generated} &middot; {total} books ranked &middot; score = sum of your theme weights &middot; click a header to sort</div>
 </header>
 <div class="wrap"><table id="t"><thead><tr>
-<th data-type="num">#</th><th data-type="num">Fit</th><th>Pred</th><th>Title / Series</th><th data-type="num">Rating</th><th data-type="num">Pages</th><th>Why</th>
+<th data-type="num">#</th><th data-type="num">Fit</th><th>Pred</th><th>Title / Series</th><th data-type="num">Rating</th><th data-type="num">Pages</th><th data-type="num">Published</th><th>Why</th>
 </tr></thead><tbody>
 """
 
@@ -210,6 +210,9 @@ def write_html(profile, rows, total_classified):
         title_sort = html.escape(b.series or b.title)
 
         stars = "&#9733;" * round(row["avg_rating"]) + "&#9734;" * (5 - round(row["avg_rating"]))
+        pub_year = row.get("published_year")
+        pub_sort = row.get("published_date") or (f"{pub_year}-01-01" if pub_year else "0000-00-00")
+        pub_disp = str(pub_year) if pub_year else "&mdash;"
         out.append(
             f'<tr>'
             f'<td class="num rank">{i}</td>'
@@ -220,6 +223,7 @@ def write_html(profile, rows, total_classified):
             f'<span class="rating-stars">{stars}</span> <strong>{row["avg_rating"]:.2f}</strong>'
             f'<div class="sub">{row["num_ratings"]:,} ratings</div></td>'
             f'<td class="num" data-sort="{row["pages"]}">{row["pages"]:,}</td>'
+            f'<td class="num" data-sort="{pub_sort}">{pub_disp}</td>'
             f'<td class="why">{html.escape(row["reasoning"])}</td>'
             f'</tr>'
         )
@@ -266,6 +270,7 @@ def _now_excluded(book, ratings):
 def rank_and_write(profile, classifications, books_by_id, series_aware=False, fmt="html", ratings=None):
     weights = profile["weights"]
     bbs = BooksBySeries.from_books(books_by_id.values())
+    cache = lib.load_cache()
     rows = []
     for bid, c in classifications.items():
         book = books_by_id.get(int(bid))
@@ -279,6 +284,7 @@ def rank_and_write(profile, classifications, books_by_id, series_aware=False, fm
         else:
             pages = book.pages_reported_by_kindle or 0
             num_ratings = book.number_of_ratings or 0
+        entry = cache.get(str(book.id), {})
         rows.append({
             "book": book,
             "tags": c["tags"],
@@ -289,6 +295,8 @@ def rank_and_write(profile, classifications, books_by_id, series_aware=False, fm
             "avg_rating": book.average_rating or 0,
             "num_ratings": num_ratings,
             "pages": pages,
+            "published_date": entry.get("published_date"),
+            "published_year": entry.get("published_year"),
         })
     rows.sort(
         key=lambda r: (

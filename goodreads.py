@@ -174,6 +174,27 @@ def description_text_for_book(book, max_retries=3, backoff_factor=0.5):
 
     return retry_with_backoff(fetch_data, max_retries, backoff_factor)
 
+def description_and_pubdate_for_book(book, max_retries=3, backoff_factor=0.5):
+    """Fetch the book page once and return (description_text, publication_info_text).
+
+    publication_info_text is the raw Goodreads string (e.g. "First published April 5,
+    2021") or None if not present.
+    """
+    def fetch_data():
+        response = requests_get_with_retry(book.goodreads_link)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        description_element = soup.find('div', {'data-testid': 'description'})
+        if not description_element:
+            raise AttributeError("Description element not found after retries")
+
+        pub_element = soup.find('p', {'data-testid': 'publicationInfo'})
+        pub_text = pub_element.text.strip() if pub_element else None
+        return description_element.text, pub_text
+
+    return retry_with_backoff(fetch_data, max_retries, backoff_factor)
+
 def book_urls_from_series_url(series_url, max_retries=3, backoff_factor=0.5):
     def fetch_data():
         response = requests_get_with_retry(series_url)
